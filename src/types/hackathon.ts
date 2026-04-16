@@ -3,7 +3,7 @@ export type Platform = "devpost" | "mlh" | "eventbrite" | "luma" | "gdg";
 export interface Hackathon {
   id: string;
   title: string;
-  description: string;
+  description: string | null;
   desc_translated: string | null;
   url: string;
   platform: Platform;

@@ -11,23 +11,19 @@ export async function GET(request: Request): Promise<Response> {
   if (!auth.ok) return auth.response;
 
   try {
-    console.info("[api/scrape] Starting scrape job.");
+    console.info("[cron/scrape] Starting daily scrape job.");
     const result = await runAllScrapers();
 
-    return NextResponse.json({
-      success: true,
-      message: "Datos actualizados",
-      ...result,
-    });
+    console.info(
+      `[cron/scrape] Done. total=${result.total}, inserted=${result.inserted}, updated=${result.updated}, errors=${result.errors.length}`
+    );
+
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
-    console.error("[api/scrape] Failed:", error);
+    console.error("[cron/scrape] Fatal error:", error);
     return NextResponse.json(
-      { success: false, error: "Failed to scrape hackathons" },
+      { error: "Scrape cron job failed" },
       { status: 500 }
     );
   }
-}
-
-export async function POST(request: Request): Promise<Response> {
-  return GET(request);
 }

@@ -1,0 +1,41 @@
+name: Daily scrape + embed (fallback)
+
+# Optional fallback for Vercel Cron. Disabled by default — uncomment the
+# `schedule` trigger to enable. Useful if the Vercel Hobby cron quota is
+# insufficient or if you want a second redundant trigger.
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: "0 6 * * *"   # scrape at 06:00 UTC
+  #   - cron: "0 7 * * *"   # embed  at 07:00 UTC
+
+jobs:
+  scrape:
+    name: Trigger scrape + embed
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Trigger scrape
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ secrets.BASE_URL }}
+        run: |
+          if [ -z "$CRON_SECRET" ] || [ -z "$BASE_URL" ]; then
+            echo "::error::Missing CRON_SECRET or BASE_URL secret"
+            exit 1
+          fi
+          curl --fail-with-body --max-time 90 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$BASE_URL/api/cron/scrape"
+
+      - name: Wait before embedding
+        run: sleep 30
+
+      - name: Trigger embed
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: ${{ secrets.BASE_URL }}
+        run: |
+          curl --fail-with-body --max-time 90 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$BASE_URL/api/cron/embed"

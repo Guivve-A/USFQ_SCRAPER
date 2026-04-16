@@ -1,8 +1,12 @@
 {
   "crons": [
     {
-      "path": "/api/scrape",
+      "path": "/api/cron/scrape",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/embed",
+      "schedule": "0 7 * * *"
     }
   ]
 }

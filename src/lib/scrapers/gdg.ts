@@ -129,6 +129,14 @@ async function fetchLiveEvents(chapterId: number): Promise<GdgEvent[]> {
   return all;
 }
 
+const HACKATHON_KEYWORDS =
+  /hack|program\s*a\s*th|code\s*jam|devfest|buildathon|ideathon|codeathon|code\s*sprint/i;
+
+function isHackathonCandidate(title: string | null, description: string | null, eventType: string | null): boolean {
+  const haystack = `${title ?? ""} ${description ?? ""} ${eventType ?? ""}`;
+  return HACKATHON_KEYWORDS.test(haystack);
+}
+
 function mapGdgEvent(event: GdgEvent, chapter: GdgChapter): Partial<Hackathon> | null {
   const title = cleanText(event.title);
   const url = toAbsoluteUrl(event.url) ?? toAbsoluteUrl(event.cohost_registration_url);
@@ -138,6 +146,11 @@ function mapGdgEvent(event: GdgEvent, chapter: GdgChapter): Partial<Hackathon> |
   }
 
   const description = stripHtml(event.description) ?? stripHtml(event.description_short);
+  const eventType = cleanText(event.event_type_title);
+
+  if (!isHackathonCandidate(title, description, eventType)) {
+    return null;
+  }
   const startDate = parseIsoDate(event.start_date);
   const typeTag = cleanText(event.event_type_title);
 

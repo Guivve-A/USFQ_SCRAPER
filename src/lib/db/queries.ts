@@ -1,6 +1,13 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-import type { Hackathon, SearchParams } from "@/types/hackathon";
+import type { Hackathon, Platform } from "@/types/hackathon";
+
+export type MatchOptions = {
+  matchThreshold?: number;
+  matchCount?: number;
+  online?: boolean;
+  platform?: Platform;
+};
 
 type HackathonRow = {
   id: number;
@@ -36,41 +43,46 @@ type SearchRpcParams = {
   filter_platform: string | null;
 };
 
-function getDbEnv() {
+let _readClient: SupabaseClient | null = null;
+let _writeClient: SupabaseClient | null = null;
+
+function getReadClient(): SupabaseClient {
+  if (_readClient) return _readClient;
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!url) {
-    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL environment variable");
+  if (!url || !anonKey) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY");
   }
 
-  if (!anonKey) {
-    throw new Error("Missing NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable");
-  }
-
-  if (!serviceRoleKey) {
-    throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY environment variable");
-  }
-
-  return { url, anonKey, serviceRoleKey };
+  _readClient = createClient(url, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return _readClient;
 }
 
-const env = getDbEnv();
+function getWriteClient(): SupabaseClient {
+  if (_writeClient) return _writeClient;
 
-const readClient: SupabaseClient = createClient(env.url, env.anonKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const writeClient: SupabaseClient = createClient(env.url, env.serviceRoleKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+  if (!url || !serviceRoleKey) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+  }
+
+  _writeClient = createClient(url, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return _writeClient;
+}
 
 function toHackathon(row: HackathonRow): Hackathon {
   return {
     id: String(row.id),
     title: row.title,
-    description: row.description ?? "",
+    description: row.description ?? null,
     desc_translated: row.desc_translated,
     url: row.url,
     platform: (row.platform ?? "devpost") as Hackathon["platform"],
@@ -95,16 +107,16 @@ function cleanPayload<T extends Record<string, unknown>>(payload: T): Partial<T>
   ) as Partial<T>;
 }
 
-function parseEmbeddingInput(query: string): string {
-  const trimmed = query.trim();
+const EMBEDDING_DIMENSIONS = 384;
 
-  if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
+function toVectorLiteral(embedding: number[]): string {
+  if (embedding.length !== EMBEDDING_DIMENSIONS) {
     throw new Error(
-      "SearchParams.query must be a vector literal like [0.1,0.2,...] after embedding generation."
+      `Expected embedding with ${EMBEDDING_DIMENSIONS} dimensions, got ${embedding.length}.`
     );
   }
 
-  return trimmed;
+  return `[${embedding.join(",")}]`;
 }
 
 export async function upsertHackathon(
@@ -134,7 +146,7 @@ export async function upsertHackathon(
     created_at: hackathon.created_at,
   });
 
-  const { data, error } = await writeClient
+  const { data, error } = await getWriteClient()
     .from("hackathons")
     .upsert(payload, { onConflict: "url" })
     .select("*")
@@ -147,31 +159,64 @@ export async function upsertHackathon(
   return toHackathon(data);
 }
 
-export async function searchHackathons(
-  params: SearchParams
+export async function matchHackathonsByEmbedding(
+  embedding: number[],
+  options: MatchOptions = {}
 ): Promise<Array<Hackathon & { similarity: number }>> {
-  const queryEmbedding = parseEmbeddingInput(params.query);
-
   const rpcParams: SearchRpcParams = {
-    query_embedding: queryEmbedding,
-    match_threshold: 0.75,
-    match_count: params.limit ?? 10,
-    filter_online: params.online ?? null,
-    filter_platform: params.platform ?? null,
+    query_embedding: toVectorLiteral(embedding),
+    match_threshold: options.matchThreshold ?? 0.4,
+    match_count: options.matchCount ?? 10,
+    filter_online: options.online ?? null,
+    filter_platform: options.platform ?? null,
   };
 
-  const { data, error } = await readClient.rpc("match_hackathons", rpcParams);
+  const { data, error } = await getReadClient().rpc("match_hackathons", rpcParams);
 
   if (error) {
-    throw new Error(`Failed to search hackathons: ${error.message}`);
+    throw new Error(`Failed to match hackathons: ${error.message}`);
   }
 
   const rows = (data ?? []) as MatchHackathonRow[];
   return rows.map((row) => ({ ...toHackathon(row), similarity: row.similarity }));
 }
 
+export async function getHackathonsWithoutEmbedding(
+  limit = 200
+): Promise<Hackathon[]> {
+  const { data, error } = await getReadClient()
+    .from("hackathons")
+    .select("*")
+    .is("embedding", null)
+    .order("created_at", { ascending: true })
+    .limit(limit)
+    .returns<HackathonRow[]>();
+
+  if (error) {
+    throw new Error(`Failed to get hackathons without embedding: ${error.message}`);
+  }
+
+  return (data ?? []).map(toHackathon);
+}
+
+export async function updateHackathonEmbedding(
+  id: number,
+  embedding: number[]
+): Promise<void> {
+  const { error } = await getWriteClient()
+    .from("hackathons")
+    .update({ embedding: toVectorLiteral(embedding) })
+    .eq("id", id);
+
+  if (error) {
+    throw new Error(
+      `Failed to update embedding for hackathon ${id}: ${error.message}`
+    );
+  }
+}
+
 export async function getHackathonById(id: number): Promise<Hackathon | null> {
-  const { data, error } = await readClient
+  const { data, error } = await getReadClient()
     .from("hackathons")
     .select("*")
     .eq("id", id)
@@ -189,7 +234,7 @@ export async function getHackathonById(id: number): Promise<Hackathon | null> {
 }
 
 export async function getHackathonByUrl(url: string): Promise<Hackathon | null> {
-  const { data, error } = await readClient
+  const { data, error } = await getReadClient()
     .from("hackathons")
     .select("*")
     .eq("url", url)
@@ -207,7 +252,7 @@ export async function getHackathonByUrl(url: string): Promise<Hackathon | null> 
 }
 
 export async function getRecentHackathons(limit = 10): Promise<Hackathon[]> {
-  const { data, error } = await readClient
+  const { data, error } = await getReadClient()
     .from("hackathons")
     .select("*")
     .order("created_at", { ascending: false })
@@ -221,11 +266,112 @@ export async function getRecentHackathons(limit = 10): Promise<Hackathon[]> {
   return (data ?? []).map(toHackathon);
 }
 
+export type SystemStats = {
+  total: number;
+  embedded: number;
+  pending: number;
+  embeddingCoverage: number;
+  latestScrapedAt: string | null;
+  platformDistribution: Record<string, number>;
+};
+
+export async function getSystemStats(): Promise<SystemStats> {
+  const client = getReadClient();
+
+  const [{ count: total, error: totalError }, { count: embedded, error: embeddedError }] =
+    await Promise.all([
+      client.from("hackathons").select("id", { count: "exact", head: true }),
+      client
+        .from("hackathons")
+        .select("id", { count: "exact", head: true })
+        .not("embedding", "is", null),
+    ]);
+
+  if (totalError) throw new Error(`Failed to count hackathons: ${totalError.message}`);
+  if (embeddedError) {
+    throw new Error(`Failed to count embedded hackathons: ${embeddedError.message}`);
+  }
+
+  const totalCount = total ?? 0;
+  const embeddedCount = embedded ?? 0;
+
+  const { data: latestRow, error: latestError } = await client
+    .from("hackathons")
+    .select("scraped_at")
+    .order("scraped_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ scraped_at: string | null }>();
+
+  if (latestError) {
+    throw new Error(`Failed to read latest scraped_at: ${latestError.message}`);
+  }
+
+  const { data: platformRows, error: platformError } = await client
+    .from("hackathons")
+    .select("platform")
+    .returns<Array<{ platform: string | null }>>();
+
+  if (platformError) {
+    throw new Error(`Failed to read platform distribution: ${platformError.message}`);
+  }
+
+  const platformDistribution: Record<string, number> = {};
+  for (const row of platformRows ?? []) {
+    const key = row.platform ?? "unknown";
+    platformDistribution[key] = (platformDistribution[key] ?? 0) + 1;
+  }
+
+  return {
+    total: totalCount,
+    embedded: embeddedCount,
+    pending: Math.max(0, totalCount - embeddedCount),
+    embeddingCoverage:
+      totalCount === 0 ? 0 : Number((embeddedCount / totalCount).toFixed(4)),
+    latestScrapedAt: latestRow?.scraped_at ?? null,
+    platformDistribution,
+  };
+}
+
+export type ListHackathonsOptions = {
+  online?: boolean;
+  platform?: Platform;
+  hasPrize?: boolean;
+  limit?: number;
+};
+
+export async function listHackathons(
+  options: ListHackathonsOptions = {}
+): Promise<Hackathon[]> {
+  let query = getReadClient()
+    .from("hackathons")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(options.limit ?? 60);
+
+  if (options.online !== undefined) {
+    query = query.eq("is_online", options.online);
+  }
+  if (options.platform) {
+    query = query.eq("platform", options.platform);
+  }
+  if (options.hasPrize) {
+    query = query.not("prize_pool", "is", null);
+  }
+
+  const { data, error } = await query.returns<HackathonRow[]>();
+
+  if (error) {
+    throw new Error(`Failed to list hackathons: ${error.message}`);
+  }
+
+  return (data ?? []).map(toHackathon);
+}
+
 export async function updateTranslation(
   id: number,
   text: string
 ): Promise<Hackathon> {
-  const { data, error } = await writeClient
+  const { data, error } = await getWriteClient()
     .from("hackathons")
     .update({ desc_translated: text })
     .eq("id", id)

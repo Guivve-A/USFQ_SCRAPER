@@ -173,9 +173,7 @@ function mapMlhEvent(event: MlhEvent): Partial<Hackathon> | null {
   }
 
   const formatType = cleanText(event.formatType)?.toLowerCase() ?? "";
-  if (formatType !== "digital") {
-    return null;
-  }
+  const isOnline = formatType === "digital";
 
   const yearFromStart = event.startsAt ? new Date(event.startsAt).getUTCFullYear() : null;
   const fallbackYear = Number.isFinite(yearFromStart) && yearFromStart
@@ -189,10 +187,11 @@ function mapMlhEvent(event: MlhEvent): Partial<Hackathon> | null {
     [cleanText(event.location), cleanText(event.dateRange)].filter(Boolean).join(" - ")
   );
 
+  const formatTag = formatType ? formatType.charAt(0).toUpperCase() + formatType.slice(1) : null;
   const tags = [
-    "Digital",
+    formatTag,
     ...((event.customFields?.underserved_types ?? []).map((item) => cleanText(item) ?? "")),
-  ].filter((item) => item.length > 0);
+  ].filter((item): item is string => item !== null && item.length > 0);
 
   const mapped: Partial<Hackathon> = {
     title,
@@ -201,8 +200,8 @@ function mapMlhEvent(event: MlhEvent): Partial<Hackathon> | null {
     start_date: startDate,
     end_date: endDate,
     deadline: endDate,
-    location: cleanText(event.location) ?? "Online",
-    is_online: true,
+    location: isOnline ? "Online" : cleanText(event.location) ?? "TBD",
+    is_online: isOnline,
     tags,
     image_url: cleanText(event.logoUrl) ?? cleanText(event.backgroundUrl),
     organizer: "MLH",
@@ -244,7 +243,7 @@ export async function scrapeMLH(): Promise<Partial<Hackathon>[]> {
   }
 
   console.info(
-    `[scrapers][mlh] Parsed ${upcomingEvents.length} events, kept ${byUrl.size} digital events.`
+    `[scrapers][mlh] Parsed ${upcomingEvents.length} events, kept ${byUrl.size} hackathons.`
   );
 
   return Array.from(byUrl.values());
