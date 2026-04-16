@@ -1,3 +1,5 @@
+import { NextResponse } from "next/server";
+
 import { runAllScrapers } from "@/lib/scrapers";
 
 export const runtime = "nodejs";
@@ -6,11 +8,11 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
 }
 
-export async function POST(request: Request): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   const secret = process.env.CRON_SECRET;
 
   if (!secret) {
-    return Response.json(
+    return NextResponse.json(
       { error: "Missing CRON_SECRET environment variable" },
       { status: 500 }
     );
@@ -18,22 +20,37 @@ export async function POST(request: Request): Promise<Response> {
 
   const authHeader = request.headers.get("authorization");
   if (authHeader !== `Bearer ${secret}`) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+    return new Response("Unauthorized", { status: 401 });
   }
 
   try {
+    console.log("Scraping iniciado con éxito");
+
     const result = await runAllScrapers();
-    return Response.json(result, { status: 200 });
+
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Datos actualizados",
+        ...result,
+      },
+      { status: 200 }
+    );
   } catch (error) {
     const details = getErrorMessage(error);
     console.error("[api/scrape] Failed to run scrapers:", error);
 
-    return Response.json(
+    return NextResponse.json(
       {
+        success: false,
         error: "Failed to scrape hackathons",
         details,
       },
       { status: 500 }
     );
   }
+}
+
+export async function POST(request: Request): Promise<Response> {
+  return GET(request);
 }
