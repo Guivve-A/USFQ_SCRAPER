@@ -188,6 +188,24 @@ export async function getHackathonById(id: number): Promise<Hackathon | null> {
   return toHackathon(data);
 }
 
+export async function getHackathonByUrl(url: string): Promise<Hackathon | null> {
+  const { data, error } = await readClient
+    .from("hackathons")
+    .select("*")
+    .eq("url", url)
+    .maybeSingle<HackathonRow>();
+
+  if (error) {
+    throw new Error(`Failed to get hackathon by url: ${error.message}`);
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return toHackathon(data);
+}
+
 export async function getRecentHackathons(limit = 10): Promise<Hackathon[]> {
   const { data, error } = await readClient
     .from("hackathons")
