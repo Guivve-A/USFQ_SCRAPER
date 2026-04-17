@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { Calendar, MapPin, Trophy, Wifi } from "lucide-react";
+import { Calendar, Clock, MapPin, Trophy, Wifi } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { Hackathon, Platform } from "@/types/hackathon";
@@ -41,6 +41,28 @@ function formatDate(value: string | null): string | null {
   }
 }
 
+type UrgencyLevel = "critical" | "warning" | null;
+
+function getUrgency(deadline: string | null): {
+  level: UrgencyLevel;
+  label: string | null;
+  daysLeft: number | null;
+} {
+  if (!deadline) return { level: null, label: null, daysLeft: null };
+  try {
+    const ms = parseISO(deadline).getTime() - Date.now();
+    const days = Math.ceil(ms / 86_400_000);
+    if (days < 0) return { level: null, label: null, daysLeft: null };
+    if (days === 0) return { level: "critical", label: "¡Cierra hoy!", daysLeft: 0 };
+    if (days === 1) return { level: "critical", label: "¡Cierra mañana!", daysLeft: 1 };
+    if (days <= 3) return { level: "critical", label: `${days} días`, daysLeft: days };
+    if (days <= 14) return { level: "warning", label: `${days} días`, daysLeft: days };
+    return { level: null, label: null, daysLeft: days };
+  } catch {
+    return { level: null, label: null, daysLeft: null };
+  }
+}
+
 export interface HackathonCardProps {
   hackathon: Hackathon;
   className?: string;
@@ -54,6 +76,7 @@ export function HackathonCard({ hackathon, className }: HackathonCardProps) {
   const visibleTags = hackathon.tags.slice(0, 3);
   const extraTags = Math.max(0, hackathon.tags.length - visibleTags.length);
   const [imgError, setImgError] = useState(false);
+  const urgency = getUrgency(hackathon.deadline);
 
   return (
     <Link
@@ -111,6 +134,22 @@ export function HackathonCard({ hackathon, className }: HackathonCardProps) {
             </span>
           )}
         </div>
+
+        {urgency.level && (
+          <div className="absolute right-3 top-3">
+            <span
+              className={cn(
+                "flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider backdrop-blur-md",
+                urgency.level === "critical"
+                  ? "animate-pulse border-rose-400/40 bg-rose-500/25 text-rose-200"
+                  : "border-amber-400/35 bg-amber-500/20 text-amber-200"
+              )}
+            >
+              <Clock className="size-3" />
+              {urgency.label}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="relative flex flex-1 flex-col gap-3 p-5">
