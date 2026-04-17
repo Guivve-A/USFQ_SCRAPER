@@ -3,6 +3,7 @@ import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
 import { LenisProvider } from "@/components/LenisProvider";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -59,6 +60,7 @@ export default function RootLayout({
         <LenisProvider>
           <div className="relative flex min-h-screen flex-col">{children}</div>
         </LenisProvider>
+        <SpeedInsights />
       </body>
     </html>
   );
