@@ -234,6 +234,9 @@ function mapGdgEvent(event: GdgEvent, chapter: GdgChapter): GdgMapResult {
   const startDate = parseIsoDate(event.start_date);
   const typeTag = cleanText(event.event_type_title);
 
+  const chapterCity = cleanText(chapter.city);
+  const isOnline = /online|virtual|remote/i.test(`${title} ${description ?? ""}`);
+
   const mapped: Partial<Hackathon> = {
     title,
     url,
@@ -241,8 +244,8 @@ function mapGdgEvent(event: GdgEvent, chapter: GdgChapter): GdgMapResult {
     start_date: startDate,
     end_date: null,
     deadline: startDate,
-    location: "Ecuador",
-    is_online: /online|virtual|remote/i.test(`${title} ${description ?? ""}`),
+    location: chapterCity,
+    is_online: isOnline,
     tags: [typeTag ?? ""].filter((tag) => tag.length > 0),
     image_url: cleanText(event.cropped_picture_url) ?? cleanText(event.cropped_banner_url),
     organizer: cleanText(chapter.title),
