@@ -23,6 +23,34 @@ const GDG_CHAPTER_SLUGS = [
 const REQUEST_TIMEOUT_MS = 10_000;
 const USER_AGENT = "Mozilla/5.0 (compatible; HackFinder/1.0)";
 
+export type GdgDropReason =
+  | "missing-title"
+  | "missing-url"
+  | "not-hackathon-candidate";
+
+export type GdgDropTrace = {
+  chapterSlug: string;
+  reason: GdgDropReason;
+  title: string | null;
+  url: string | null;
+  eventType: string | null;
+  details: string | null;
+};
+
+export type GdgScrapeDiagnostics = {
+  fetched: number;
+  mapped: number;
+  dropped: number;
+  dropReasons: Record<GdgDropReason, number>;
+  drops: GdgDropTrace[];
+  errors: string[];
+};
+
+export type GdgScrapeWithDiagnosticsResult = {
+  items: Partial<Hackathon>[];
+  diagnostics: GdgScrapeDiagnostics;
+};
+
 type GdgChapter = {
   id: number;
   title?: string;
@@ -145,27 +173,64 @@ async function fetchLiveEvents(chapterId: number): Promise<GdgEvent[]> {
 }
 
 const HACKATHON_KEYWORDS =
-  /hack|program\s*a\s*th|code\s*jam|devfest|buildathon|ideathon|codeathon|code\s*sprint/i;
+  /hack|program\s*a\s*th|code\s*jam|devfest|buildathon|ideathon|codeathon|code\s*sprint|build\s*with\s*ai/i;
 
 function isHackathonCandidate(title: string | null, description: string | null, eventType: string | null): boolean {
   const haystack = `${title ?? ""} ${description ?? ""} ${eventType ?? ""}`;
   return HACKATHON_KEYWORDS.test(haystack);
 }
 
-function mapGdgEvent(event: GdgEvent, chapter: GdgChapter): Partial<Hackathon> | null {
+type GdgMapResult =
+  | { ok: true; item: Partial<Hackathon> }
+  | {
+      ok: false;
+      reason: GdgDropReason;
+      title: string | null;
+      url: string | null;
+      eventType: string | null;
+      details: string | null;
+    };
+
+function mapGdgEvent(event: GdgEvent, chapter: GdgChapter): GdgMapResult {
   const title = cleanText(event.title);
   const url = toAbsoluteUrl(event.url) ?? toAbsoluteUrl(event.cohost_registration_url);
+  const eventType = cleanText(event.event_type_title);
 
-  if (!title || !url) {
-    return null;
+  if (!title) {
+    return {
+      ok: false,
+      reason: "missing-title",
+      title: null,
+      url,
+      eventType,
+      details: "Event has no normalized title.",
+    };
+  }
+
+  if (!url) {
+    return {
+      ok: false,
+      reason: "missing-url",
+      title,
+      url: null,
+      eventType,
+      details: "Event has no canonical URL or cohost URL.",
+    };
   }
 
   const description = stripHtml(event.description) ?? stripHtml(event.description_short);
-  const eventType = cleanText(event.event_type_title);
 
   if (!isHackathonCandidate(title, description, eventType)) {
-    return null;
+    return {
+      ok: false,
+      reason: "not-hackathon-candidate",
+      title,
+      url,
+      eventType,
+      details: "Title/description/event type did not match hackathon keywords.",
+    };
   }
+
   const startDate = parseIsoDate(event.start_date);
   const typeTag = cleanText(event.event_type_title);
 
@@ -187,26 +252,50 @@ function mapGdgEvent(event: GdgEvent, chapter: GdgChapter): Partial<Hackathon> |
     mapped.description = description;
   }
 
-  return mapped;
+  return { ok: true, item: mapped };
 }
 
-export async function scrapeGDG(): Promise<Partial<Hackathon>[]> {
+export async function scrapeGDGWithDiagnostics(): Promise<GdgScrapeWithDiagnosticsResult> {
   const output: Partial<Hackathon>[] = [];
+  const drops: GdgDropTrace[] = [];
   const chapterErrors: string[] = [];
+  const dropReasons: Record<GdgDropReason, number> = {
+    "missing-title": 0,
+    "missing-url": 0,
+    "not-hackathon-candidate": 0,
+  };
+  let fetched = 0;
 
   for (const slug of GDG_CHAPTER_SLUGS) {
     try {
       const chapter = await fetchChapter(slug);
       const events = await fetchLiveEvents(chapter.id);
+      fetched += events.length;
 
-      const mapped = events
-        .map((event) => mapGdgEvent(event, chapter))
-        .filter((item): item is Partial<Hackathon> => item !== null);
+      let mapped = 0;
+
+      for (const event of events) {
+        const result = mapGdgEvent(event, chapter);
+        if (result.ok) {
+          output.push(result.item);
+          mapped += 1;
+          continue;
+        }
+
+        dropReasons[result.reason] += 1;
+        drops.push({
+          chapterSlug: slug,
+          reason: result.reason,
+          title: result.title,
+          url: result.url,
+          eventType: result.eventType,
+          details: result.details,
+        });
+      }
 
       console.info(
-        `[scrapers][gdg] ${slug}: fetched ${events.length}, mapped ${mapped.length}.`
+        `[scrapers][gdg] ${slug}: fetched ${events.length}, mapped ${mapped}, dropped ${events.length - mapped}.`
       );
-      output.push(...mapped);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unknown GDG scraper failure";
@@ -226,5 +315,34 @@ export async function scrapeGDG(): Promise<Partial<Hackathon>[]> {
     byUrl.set(item.url, item);
   }
 
-  return Array.from(byUrl.values());
+  if (drops.length > 0) {
+    console.info(
+      `[scrapers][gdg] drop reasons: ${Object.entries(dropReasons)
+        .map(([reason, count]) => `${reason}=${count}`)
+        .join(", ")}`
+    );
+
+    for (const drop of drops.slice(0, 10)) {
+      console.info(
+        `[scrapers][gdg][drop] chapter=${drop.chapterSlug} reason=${drop.reason} title="${drop.title ?? "N/A"}" url="${drop.url ?? "N/A"}" eventType="${drop.eventType ?? "N/A"}"`
+      );
+    }
+  }
+
+  return {
+    items: Array.from(byUrl.values()),
+    diagnostics: {
+      fetched,
+      mapped: byUrl.size,
+      dropped: drops.length,
+      dropReasons,
+      drops,
+      errors: chapterErrors,
+    },
+  };
+}
+
+export async function scrapeGDG(): Promise<Partial<Hackathon>[]> {
+  const result = await scrapeGDGWithDiagnostics();
+  return result.items;
 }

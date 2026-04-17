@@ -435,14 +435,31 @@ export async function pruneStaleByPlatform(
 }
 
 export async function pruneExpiredByDeadline(
-  deadlineBefore: string
+  deadlineBefore: string,
+  options: { excludePlatforms?: string[] } = {}
 ): Promise<number> {
-  const { data, error } = await getWriteClient()
+  let query = getWriteClient()
     .from("hackathons")
     .delete({ count: "exact" })
     .not("deadline", "is", null)
-    .lt("deadline", deadlineBefore)
-    .select("id");
+    .lt("deadline", deadlineBefore);
+
+  const excludePlatforms = Array.from(
+    new Set(
+      (options.excludePlatforms ?? [])
+        .map((platform) => platform.trim())
+        .filter((platform) => platform.length > 0)
+    )
+  );
+
+  if (excludePlatforms.length > 0) {
+    const sqlInValues = `(${excludePlatforms
+      .map((platform) => `"${platform.replace(/"/g, "")}"`)
+      .join(",")})`;
+    query = query.not("platform", "in", sqlInValues);
+  }
+
+  const { data, error } = await query.select("id");
 
   if (error) {
     throw new Error(
