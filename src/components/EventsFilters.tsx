@@ -27,11 +27,20 @@ const PRIZE_OPTIONS = [
   { id: "1", label: "Con premio" },
 ];
 
+const SCOPE_OPTIONS = [
+  { id: "ecuador-friendly", label: "Para Ecuador" },
+  { id: "ecuador-only", label: "Solo Ecuador" },
+  { id: "latam-online", label: "LATAM online" },
+  { id: "global-online", label: "Global online" },
+  { id: "all", label: "Todo" },
+];
+
 export interface EventsFiltersProps {
   initialQuery: string;
   initialOnline?: string;
   initialPlatform?: string;
   initialPrize?: string;
+  initialScope?: string;
 }
 
 export function EventsFilters({
@@ -39,6 +48,7 @@ export function EventsFilters({
   initialOnline = "",
   initialPlatform = "",
   initialPrize = "",
+  initialScope = "ecuador-friendly",
 }: EventsFiltersProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -56,13 +66,28 @@ export function EventsFilters({
     });
   }
 
-  const activeCount = [initialOnline, initialPlatform, initialPrize].filter(
-    Boolean
-  ).length;
+  const activeCount =
+    [initialOnline, initialPlatform, initialPrize].filter(Boolean).length +
+    (initialScope && initialScope !== "ecuador-friendly" ? 1 : 0);
+
+  function updateScope(value: string) {
+    const next = new URLSearchParams(searchParams.toString());
+    if (value && value !== "ecuador-friendly") next.set("scope", value);
+    else next.delete("scope");
+
+    const qs = next.toString();
+    startTransition(() => {
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    });
+  }
 
   function clearAll() {
+    const next = new URLSearchParams();
+    const currentQ = searchParams.get("q");
+    if (currentQ) next.set("q", currentQ);
+    const qs = next.toString();
     startTransition(() => {
-      router.replace(pathname, { scroll: false });
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     });
   }
 
@@ -110,6 +135,15 @@ export function EventsFilters({
               </button>
             )}
           </div>
+        </div>
+
+        <div className="mb-5 border-b border-white/5 pb-5">
+          <FilterGroup
+            label="Alcance"
+            value={initialScope}
+            options={SCOPE_OPTIONS}
+            onChange={updateScope}
+          />
         </div>
 
         <div className="grid gap-5 sm:grid-cols-3 sm:gap-6">

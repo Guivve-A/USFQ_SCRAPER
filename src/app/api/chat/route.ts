@@ -65,6 +65,13 @@ const translateToolResponseSchema = z.object({
 const SYSTEM_PROMPT = `Eres HackBot, un asistente experto en descubrir hackathons.
 Ayudas a desarrolladores, disenadores y cientificos de datos a encontrar competencias relevantes.
 Cuando el usuario busque eventos, usa SIEMPRE la herramienta searchHackathons antes de responder.
+Alcance geografico (parametro scope):
+- Por defecto usa 'ecuador-friendly' (hackathons en Ecuador, LATAM, y online globales accesibles desde Ecuador).
+- Si el usuario menciona "Ecuador", "eventos locales" o "presencial en Ecuador", usa scope='ecuador-only'.
+- Si menciona "LATAM" o "Latinoamerica", usa scope='latam-online'.
+- Si dice "globales", "mundiales" o "internacionales", usa scope='global-online'.
+- Solo usa scope='all' si pide explicitamente ver todo sin filtros.
+Si el usuario pide "eventos en Ecuador" NUNCA devuelvas eventos presenciales de otros paises.
 Presenta los resultados con: nombre, fecha, premios, link y una frase breve de por que es relevante.
 Si el usuario escribe en espanol, responde en espanol.
 Si escribe en ingles, responde en ingles.
@@ -150,12 +157,13 @@ export async function POST(request: Request): Promise<Response> {
       description:
         "Busca hackathons en la base de datos por descripcion semantica. Usala cuando el usuario mencione buscar hackathons, eventos, competencias o pida recomendaciones.",
       inputSchema: searchHackathonsSchema,
-      execute: async ({ query, online, platform, limit }) => {
+      execute: async ({ query, online, platform, scope, limit }) => {
         const results = await searchHackathons({
           query,
           online,
           platform,
           limit,
+          scope: (scope ?? "ecuador-friendly") as Scope,
         });
 
         return results.map((hackathon) => ({

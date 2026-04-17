@@ -7,6 +7,7 @@ import { HackathonCard } from "@/components/HackathonCard";
 import { SiteHeader } from "@/components/SiteHeader";
 import { searchHackathons } from "@/lib/ai/search";
 import { listHackathons } from "@/lib/db/queries";
+import { isScope, resolveScope, type Scope } from "@/lib/region";
 import type { Hackathon, Platform } from "@/types/hackathon";
 
 export const dynamic = "force-dynamic";
@@ -47,10 +48,14 @@ export default async function EventsPage({
   const onlineRaw = asString(params.online);
   const platformRaw = asString(params.platform);
   const prizeRaw = asString(params.prize);
+  const scopeRaw = asString(params.scope);
 
   const online = asOnline(onlineRaw);
   const platform = asPlatform(platformRaw);
   const hasPrize = prizeRaw === "1";
+  const scope: Scope = isScope(scopeRaw) ? scopeRaw : "ecuador-friendly";
+  const { regions, includeUnknownOnline, forceOnline } = resolveScope(scope);
+  const effectiveOnline = online ?? forceOnline;
 
   let items: Hackathon[] = [];
   let errorMessage: string | null = null;
@@ -62,14 +67,17 @@ export default async function EventsPage({
         online,
         platform,
         limit: 24,
+        scope,
       });
       items = hasPrize ? hits.filter((h) => Boolean(h.prize_pool)) : hits;
     } else {
       items = await listHackathons({
-        online,
+        online: effectiveOnline,
         platform,
         hasPrize,
         limit: 60,
+        regions,
+        includeUnknownOnline,
       });
     }
   } catch (error) {
@@ -104,6 +112,7 @@ export default async function EventsPage({
           initialOnline={onlineRaw}
           initialPlatform={platformRaw}
           initialPrize={prizeRaw}
+          initialScope={scope}
         />
 
         <div className="mt-10 mb-5 flex items-center justify-between">
