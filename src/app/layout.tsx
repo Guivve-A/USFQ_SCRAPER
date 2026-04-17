@@ -34,6 +34,18 @@ export default function RootLayout({
       className={`${inter.variable} ${spaceGrotesk.variable} dark h-full antialiased`}
       suppressHydrationWarning
     >
+      <head>
+        <link
+          rel="preload"
+          as="fetch"
+          href="/textures/night_sky_stars.hdr"
+          crossOrigin="anonymous"
+        />
+        <link rel="preload" as="image" href="/textures/earth-color.jpg" />
+        <link rel="preload" as="image" href="/textures/earth-normal.jpg" />
+        <link rel="preload" as="image" href="/textures/earth-specular.jpg" />
+        <link rel="preload" as="image" href="/textures/earth-clouds.jpg" />
+      </head>
       <body className="relative min-h-full overflow-x-hidden bg-background text-foreground">
         <div
           aria-hidden

@@ -7,6 +7,7 @@ import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 
+import { AssetPreloader } from "@/components/AssetPreloader";
 import { HackathonCard } from "@/components/HackathonCard";
 import { SearchBar, type HackathonSearchHit } from "@/components/SearchBar";
 import { cn } from "@/lib/utils";
@@ -176,6 +177,7 @@ export function HomeExperience({ recent }: HomeExperienceProps) {
 
   return (
     <div ref={rootRef}>
+      <AssetPreloader />
       <section
         ref={heroRef}
         className="relative h-[100vh] min-h-[720px] overflow-hidden bg-slate-950"
