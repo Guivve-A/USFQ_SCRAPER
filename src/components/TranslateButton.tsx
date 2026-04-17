@@ -60,7 +60,7 @@ export function TranslateButton({
           variant="outline"
           onClick={handleTranslate}
           disabled={loading}
-          className="border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+          className="border-cyan-500/30 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20 hover:text-cyan-100"
         >
           {loading ? (
             <Loader2 className="size-4 animate-spin" />
@@ -72,18 +72,18 @@ export function TranslateButton({
       )}
 
       {translation && (
-        <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-indigo-700">
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-cyan-300">
             Resumen en español
           </p>
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-800">
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-200">
             {translation}
           </p>
         </div>
       )}
 
       {error && (
-        <p className="text-xs text-rose-600">{error}</p>
+        <p className="text-xs text-rose-300">{error}</p>
       )}
     </div>
   );
