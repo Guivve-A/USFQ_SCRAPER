@@ -5,21 +5,21 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { gsap } from "gsap";
 import * as THREE from "three";
 
-const COUNT = 3500;
-const INNER_RADIUS = 2.6;
-const OUTER_RADIUS = 5.2;
-const REPEL_RADIUS = 1.2;
+const COUNT = 4000;
+const INNER_RADIUS = 2.06;
+const OUTER_RADIUS = 2.55;
+const REPEL_RADIUS = 0.45;
+const EARTH_OFFSET_Y = -1;
 
 function buildParticles() {
   const positions = new Float32Array(COUNT * 3);
   const homes = new Float32Array(COUNT * 3);
   const displacements = new Float32Array(COUNT * 3);
-  const sizes = new Float32Array(COUNT);
 
   for (let i = 0; i < COUNT; i++) {
     const r =
       INNER_RADIUS +
-      Math.pow(Math.random(), 1.4) * (OUTER_RADIUS - INNER_RADIUS);
+      Math.pow(Math.random(), 1.7) * (OUTER_RADIUS - INNER_RADIUS);
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos(2 * Math.random() - 1);
     const x = r * Math.sin(phi) * Math.cos(theta);
@@ -28,56 +28,24 @@ function buildParticles() {
     positions[i * 3] = homes[i * 3] = x;
     positions[i * 3 + 1] = homes[i * 3 + 1] = y;
     positions[i * 3 + 2] = homes[i * 3 + 2] = z;
-    sizes[i] = 0.7 + Math.random() * 1.4;
   }
 
-  return { positions, homes, displacements, sizes };
+  return { positions, homes, displacements };
 }
 
 const PARTICLES = buildParticles();
 
-const vertexShader = /* glsl */ `
-  uniform float uPixelRatio;
-  attribute float aSize;
-  void main() {
-    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-    gl_Position = projectionMatrix * mvPosition;
-    gl_PointSize = aSize * uPixelRatio * (260.0 / -mvPosition.z);
-  }
-`;
-
-const fragmentShader = /* glsl */ `
-  uniform vec3 uColor;
-  void main() {
-    vec2 c = gl_PointCoord - 0.5;
-    float d = length(c);
-    if (d > 0.5) discard;
-    float alpha = smoothstep(0.5, 0.42, d);
-    gl_FragColor = vec4(uColor, alpha);
-  }
-`;
-
 export function InteractiveParticles() {
-  const pointsRef = useRef<THREE.Points>(null);
-  const matRef = useRef<THREE.ShaderMaterial>(null);
+  const groupRef = useRef<THREE.Points>(null);
   const { camera, gl } = useThree();
 
-  const { positions, homes, displacements, sizes } = useMemo(
+  const { positions, homes, displacements } = useMemo(
     () => ({
       positions: PARTICLES.positions.slice(),
       homes: PARTICLES.homes,
       displacements: PARTICLES.displacements.slice(),
-      sizes: PARTICLES.sizes,
     }),
     []
-  );
-
-  const uniforms = useMemo(
-    () => ({
-      uPixelRatio: { value: gl.getPixelRatio() },
-      uColor: { value: new THREE.Color("#dff2ff") },
-    }),
-    [gl]
   );
 
   const dispersion = useRef({ factor: 0 });
@@ -114,16 +82,21 @@ export function InteractiveParticles() {
         .copy(camera.position)
         .add(tmpDir.multiplyScalar(distToPlane));
 
-      const strength = Math.min(velocity, 4) * 0.5;
+      // convert into the orbiting group's local frame (group is offset by EARTH_OFFSET_Y on Y)
+      const localX = tmpWorld.x;
+      const localY = tmpWorld.y - EARTH_OFFSET_Y;
+      const localZ = tmpWorld.z;
+
+      const strength = Math.min(velocity, 4) * 0.18;
       displacements.fill(0);
 
       for (let i = 0; i < COUNT; i++) {
         const hx = homes[i * 3];
         const hy = homes[i * 3 + 1];
         const hz = homes[i * 3 + 2];
-        const tx = hx - tmpWorld.x;
-        const ty = hy - tmpWorld.y;
-        const tz = hz - tmpWorld.z;
+        const tx = hx - localX;
+        const ty = hy - localY;
+        const tz = hz - localZ;
         const dist = Math.sqrt(tx * tx + ty * ty + tz * tz);
         if (dist < REPEL_RADIUS) {
           const fall = (1 - dist / REPEL_RADIUS) * strength;
@@ -138,8 +111,8 @@ export function InteractiveParticles() {
       dispersionState.factor = 1;
       gsap.to(dispersionState, {
         factor: 0,
-        duration: 1.8,
-        ease: "elastic.out(1, 0.5)",
+        duration: 1.6,
+        ease: "elastic.out(1, 0.55)",
       });
     };
 
@@ -151,8 +124,8 @@ export function InteractiveParticles() {
   }, [camera, gl, displacements, homes]);
 
   useFrame((_, delta) => {
-    if (!pointsRef.current) return;
-    const attr = pointsRef.current.geometry.attributes
+    if (!groupRef.current) return;
+    const attr = groupRef.current.geometry.attributes
       .position as THREE.BufferAttribute;
     const arr = attr.array as Float32Array;
     const f = dispersion.current.factor;
@@ -161,11 +134,11 @@ export function InteractiveParticles() {
       arr[i] = homes[i] + displacements[i] * f;
     }
     attr.needsUpdate = true;
-    pointsRef.current.rotation.y += delta * 0.012;
+    groupRef.current.rotation.y += delta * 0.015;
   });
 
   return (
-    <points ref={pointsRef}>
+    <points ref={groupRef} position={[0, EARTH_OFFSET_Y, 0]}>
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"
@@ -173,19 +146,13 @@ export function InteractiveParticles() {
           count={COUNT}
           itemSize={3}
         />
-        <bufferAttribute
-          attach="attributes-aSize"
-          args={[sizes, 1]}
-          count={COUNT}
-          itemSize={1}
-        />
       </bufferGeometry>
-      <shaderMaterial
-        ref={matRef}
-        uniforms={uniforms}
-        vertexShader={vertexShader}
-        fragmentShader={fragmentShader}
+      <pointsMaterial
+        size={0.014}
+        color="#e8eef5"
+        sizeAttenuation
         transparent
+        opacity={0.9}
         depthWrite={false}
       />
     </points>
