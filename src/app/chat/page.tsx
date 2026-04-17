@@ -47,85 +47,93 @@ export default function ChatPage() {
   return (
     <>
       <SiteHeader />
-      <main className="flex flex-1 flex-col bg-gradient-to-b from-white via-zinc-50 to-zinc-100">
-        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-6 sm:px-6">
+      <main className="relative flex flex-1 flex-col bg-[#0A0A0A] text-gray-200">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(37,99,235,0.18),transparent_45%),radial-gradient(circle_at_82%_100%,rgba(34,211,238,0.12),transparent_50%)]"
+        />
+
+        <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-4 py-6 sm:px-6">
           <header className="mb-4 flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-200">
+            <span className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-400 text-white shadow-[0_10px_28px_-10px_rgba(34,211,238,0.6)]">
               <Sparkles className="size-5" />
             </span>
             <div>
-              <h1 className="text-lg font-semibold text-zinc-900">HackBot</h1>
-              <p className="text-xs text-zinc-500">
+              <h1 className="text-lg font-semibold text-white">HackBot</h1>
+              <p className="text-xs text-gray-400">
                 Pregunta en lenguaje natural y descubre hackathons relevantes
               </p>
             </div>
           </header>
 
-          <div
-            ref={scrollRef}
-            className="flex-1 overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-6"
-          >
-            <div className="space-y-5">
-              {messages.map((message) => (
-                <MessageBubble key={message.id} message={message} />
-              ))}
+          <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-white/10 bg-white/[0.02] shadow-2xl backdrop-blur-md">
+            <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+              <div className="space-y-5">
+                {messages.map((message) => (
+                  <MessageBubble key={message.id} message={message} />
+                ))}
 
-              {isLoading && messages.at(-1)?.role !== "assistant" && (
-                <TypingIndicator />
-              )}
+                {isLoading && messages.at(-1)?.role !== "assistant" && (
+                  <TypingIndicator />
+                )}
+              </div>
             </div>
-          </div>
 
-          {messages.length <= 1 && (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {SUGGESTIONS.map((suggestion) => (
-                <button
-                  key={suggestion}
-                  type="button"
-                  onClick={() => {
-                    handleInputChange({
-                      target: { value: suggestion },
-                    } as unknown as React.ChangeEvent<HTMLInputElement>);
-                  }}
-                  className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-          )}
+            {messages.length <= 1 && (
+              <div className="border-t border-white/10 px-4 pb-1 pt-3 sm:px-6">
+                <div className="flex flex-wrap gap-2">
+                  {SUGGESTIONS.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => {
+                        handleInputChange({
+                          target: { value: suggestion },
+                        } as unknown as React.ChangeEvent<HTMLInputElement>);
+                      }}
+                      className="rounded-full border border-cyan-500/30 bg-transparent px-4 py-2 text-sm text-cyan-400 transition-all duration-300 hover:border-cyan-400 hover:bg-cyan-500/10 hover:shadow-[0_0_10px_rgba(34,211,238,0.2)]"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
-          <form
-            onSubmit={handleSubmit}
-            className="mt-4 flex items-end gap-2 rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm focus-within:border-indigo-400 focus-within:ring-4 focus-within:ring-indigo-100"
-          >
-            <textarea
-              value={input}
-              onChange={handleInputChange}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void handleSubmit();
-                }
-              }}
-              rows={1}
-              placeholder="Busca hackathons…"
-              aria-label="Mensaje para HackBot"
-              className="max-h-32 min-h-[2.25rem] flex-1 resize-none border-0 bg-transparent px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none"
-            />
-            <button
-              type="submit"
-              disabled={isLoading || !input.trim()}
-              aria-label="Enviar mensaje"
-              className="flex size-9 items-center justify-center rounded-xl bg-indigo-600 text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+            <form
+              onSubmit={handleSubmit}
+              className="mt-3 border-t border-white/10 p-3 sm:p-4"
             >
-              {isLoading ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <ArrowUp className="size-4" />
-              )}
-            </button>
-          </form>
+              <div className="flex items-end gap-2 rounded-xl border border-white/10 bg-black/40 p-2 transition-all focus-within:border-cyan-500 focus-within:ring-1 focus-within:ring-cyan-500/50">
+                <textarea
+                  value={input}
+                  onChange={handleInputChange}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      void handleSubmit();
+                    }
+                  }}
+                  rows={1}
+                  placeholder="Busca hackathons..."
+                  aria-label="Mensaje para HackBot"
+                  className="max-h-32 min-h-[2.25rem] flex-1 resize-none rounded-xl border border-transparent bg-black/40 px-3 py-2 text-sm text-white placeholder:text-gray-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 transition-all"
+                />
+                <button
+                  type="submit"
+                  disabled={isLoading || !input.trim()}
+                  aria-label="Enviar mensaje"
+                  className="flex size-9 items-center justify-center rounded-xl border border-blue-500/40 bg-blue-600/80 text-white shadow-[0_0_14px_rgba(37,99,235,0.35)] transition-all hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isLoading ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <ArrowUp className="size-4" />
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </main>
     </>
@@ -147,8 +155,8 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         className={cn(
           "flex size-8 shrink-0 items-center justify-center rounded-full",
           isUser
-            ? "bg-indigo-100 text-indigo-700"
-            : "bg-zinc-900 text-white"
+            ? "border border-blue-500/40 bg-blue-600/20 text-blue-100"
+            : "border border-cyan-500/30 bg-white/5 text-cyan-300"
         )}
       >
         {isUser ? <User className="size-4" /> : <Bot className="size-4" />}
@@ -177,8 +185,8 @@ function PartRenderer({ part, isUser }: { part: ToolPart; isUser: boolean }) {
         className={cn(
           "whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
           isUser
-            ? "bg-indigo-600 text-white"
-            : "bg-zinc-100 text-zinc-900"
+            ? "border border-blue-500/30 bg-blue-600/20 text-blue-100"
+            : "border border-white/10 border-l-2 border-l-cyan-500 bg-white/5 text-gray-300"
         )}
       >
         {text}
@@ -189,8 +197,8 @@ function PartRenderer({ part, isUser }: { part: ToolPart; isUser: boolean }) {
   if (part.type === "tool-searchHackathons") {
     if (part.state !== "output-available") {
       return (
-        <div className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600">
-          <Loader2 className="size-3.5 animate-spin text-indigo-500" />
+        <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-gray-400">
+          <Loader2 className="size-3.5 animate-spin text-cyan-400" />
           Buscando hackathons…
         </div>
       );
@@ -199,7 +207,7 @@ function PartRenderer({ part, isUser }: { part: ToolPart; isUser: boolean }) {
     const hits = Array.isArray(part.output) ? (part.output as SearchToolHit[]) : [];
     if (hits.length === 0) {
       return (
-        <div className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600">
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-gray-400">
           Sin coincidencias en la base de datos.
         </div>
       );
@@ -211,37 +219,37 @@ function PartRenderer({ part, isUser }: { part: ToolPart; isUser: boolean }) {
           <Link
             key={hit.hackathonId}
             href={`/events/${hit.hackathonId}`}
-            className="group flex flex-col gap-1 rounded-xl border border-zinc-200 bg-white p-3 text-sm shadow-sm transition hover:border-indigo-300 hover:shadow-md"
+            className="group flex flex-col gap-1 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-sm transition hover:border-cyan-400/40 hover:bg-white/[0.05] hover:shadow-[0_0_14px_rgba(34,211,238,0.18)]"
           >
-            <span className="line-clamp-2 font-semibold text-zinc-900 group-hover:text-indigo-700">
+            <span className="line-clamp-2 font-semibold text-white group-hover:text-cyan-200">
               {hit.name}
             </span>
-            <div className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-400">
               {hit.platform && (
-                <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 font-medium uppercase tracking-wide">
+                <span className="rounded-md border border-cyan-500/20 bg-cyan-900/25 px-1.5 py-0.5 font-medium uppercase tracking-wide text-cyan-300">
                   {hit.platform}
                 </span>
               )}
               {hit.online !== undefined && (
                 <span
                   className={cn(
-                    "rounded-md px-1.5 py-0.5 font-medium",
+                    "rounded-md border px-1.5 py-0.5 font-medium",
                     hit.online
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-zinc-100 text-zinc-700"
+                      ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
+                      : "border-white/15 bg-white/5 text-gray-300"
                   )}
                 >
                   {hit.online ? "Online" : "Presencial"}
                 </span>
               )}
               {hit.prize && (
-                <span className="inline-flex items-center gap-1 text-amber-700">
+                <span className="inline-flex items-center gap-1 text-amber-300">
                   <Trophy className="size-3" />
                   {hit.prize}
                 </span>
               )}
               {typeof hit.relevance === "number" && (
-                <span className="ml-auto text-zinc-400">
+                <span className="ml-auto text-gray-500">
                   match {(hit.relevance * 100).toFixed(0)}%
                 </span>
               )}
@@ -256,7 +264,7 @@ function PartRenderer({ part, isUser }: { part: ToolPart; isUser: boolean }) {
     const translated = (part.output as { translated?: string } | undefined)?.translated;
     if (!translated) return null;
     return (
-      <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs italic text-indigo-900">
+      <div className="rounded-xl border border-cyan-500/20 bg-cyan-900/20 px-3 py-2 text-xs italic text-cyan-200">
         {translated}
       </div>
     );
@@ -267,14 +275,14 @@ function PartRenderer({ part, isUser }: { part: ToolPart; isUser: boolean }) {
 
 function TypingIndicator() {
   return (
-    <div className="flex items-center gap-2 text-xs text-zinc-500">
-      <span className="flex size-8 items-center justify-center rounded-full bg-zinc-900 text-white">
+    <div className="flex items-center gap-2 text-xs text-gray-400">
+      <span className="flex size-8 items-center justify-center rounded-full border border-cyan-500/30 bg-white/5 text-cyan-300">
         <Bot className="size-4" />
       </span>
       <div className="flex gap-1">
-        <span className="size-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:-0.3s]" />
-        <span className="size-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:-0.15s]" />
-        <span className="size-1.5 animate-bounce rounded-full bg-zinc-400" />
+        <span className="size-1.5 animate-bounce rounded-full bg-cyan-400 [animation-delay:-0.3s]" />
+        <span className="size-1.5 animate-bounce rounded-full bg-cyan-400 [animation-delay:-0.15s]" />
+        <span className="size-1.5 animate-bounce rounded-full bg-cyan-400" />
       </div>
     </div>
   );
