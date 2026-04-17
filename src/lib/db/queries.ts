@@ -310,6 +310,7 @@ export async function getRecentHackathons(
     .order("created_at", { ascending: false })
     .limit(fetchLimit);
 
+  query = applyActiveFilter(query);
   query = applyRegionFilter(query, options.regions, options.includeUnknownOnline);
 
   const { data, error } = await query.returns<HackathonRow[]>();
@@ -342,6 +343,11 @@ function applyRegionFilter(
   }
 
   return query.in("region", regions);
+}
+
+function applyActiveFilter(query: SupabaseFilterBuilder): SupabaseFilterBuilder {
+  const nowIso = new Date().toISOString();
+  return query.or(`deadline.is.null,deadline.gte.${nowIso}`);
 }
 
 export type SystemStats = {
@@ -450,6 +456,7 @@ export async function listHackathons(
     query = query.not("prize_pool", "is", null);
   }
 
+  query = applyActiveFilter(query);
   query = applyRegionFilter(query, options.regions, options.includeUnknownOnline);
 
   const { data, error } = await query.returns<HackathonRow[]>();
