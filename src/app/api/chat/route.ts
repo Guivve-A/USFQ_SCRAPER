@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import { searchHackathons } from "@/lib/ai/search";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { SCOPE_VALUES, type Scope } from "@/lib/region";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -42,6 +43,12 @@ const searchHackathonsSchema = z.object({
   query: z.string().trim().min(1).describe("Descripcion semantica de lo que busca"),
   online: z.boolean().optional().describe("Filtrar solo online"),
   platform: z.enum(["devpost", "mlh", "eventbrite", "gdg", "lablab"]).optional(),
+  scope: z
+    .enum(SCOPE_VALUES as unknown as [string, ...string[]])
+    .optional()
+    .describe(
+      "Alcance geografico. 'ecuador-friendly' (default) incluye hackathons en Ecuador, LATAM y online globales. 'ecuador-only' solo Ecuador. 'latam-online' online para LATAM. 'global-online' online fuera de LATAM. 'all' sin filtro."
+    ),
   limit: z.number().int().min(1).max(20).default(5),
 });
 

@@ -1,3 +1,5 @@
+import type { Region, Scope } from "@/lib/region";
+
 export type Platform =
   | "devpost"
   | "mlh"
@@ -23,6 +25,7 @@ export interface Hackathon {
   tags: string[];
   image_url: string | null;
   organizer: string | null;
+  region: Region | null;
   scraped_at: string;
   created_at: string;
 }
@@ -32,4 +35,5 @@ export interface SearchParams {
   online?: boolean;
   platform?: Platform;
   limit?: number;
+  scope?: Scope;
 }

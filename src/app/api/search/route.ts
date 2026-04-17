@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { searchHackathons } from "@/lib/ai/search";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { SCOPE_VALUES, type Scope } from "@/lib/region";
 
 export const runtime = "nodejs";
 
@@ -20,6 +21,7 @@ const searchSchema = z.object({
     .enum(["devpost", "mlh", "eventbrite", "luma", "gdg", "lablab"])
     .optional(),
   limit: z.coerce.number().int().min(1).max(50).optional(),
+  scope: z.enum(SCOPE_VALUES as unknown as [string, ...string[]]).optional(),
 });
 
 export async function GET(request: Request): Promise<Response> {
@@ -37,6 +39,7 @@ export async function GET(request: Request): Promise<Response> {
     online: url.searchParams.get("online") ?? undefined,
     platform: url.searchParams.get("platform") ?? undefined,
     limit: url.searchParams.get("limit") ?? undefined,
+    scope: url.searchParams.get("scope") ?? undefined,
   });
 
   if (!parsed.success) {
@@ -50,10 +53,16 @@ export async function GET(request: Request): Promise<Response> {
     );
   }
 
-  const { q, online, platform, limit } = parsed.data;
+  const { q, online, platform, limit, scope } = parsed.data;
 
   try {
-    const results = await searchHackathons({ query: q, online, platform, limit });
+    const results = await searchHackathons({
+      query: q,
+      online,
+      platform,
+      limit,
+      scope: scope as Scope | undefined,
+    });
     return NextResponse.json({ count: results.length, results });
   } catch (error) {
     console.error("[api/search] Failed:", error);

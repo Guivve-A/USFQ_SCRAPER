@@ -38,7 +38,7 @@ const FILTERS: Array<{ id: string; label: string; filter: Filter }> = [
 
 const TITLE_WORDS = ["Descubre", "tu", "próximo", "hackathon"];
 const HERO_SUBTITLE_LINES = [
-  "Eventos de Devpost, MLH, Eventbrite y la comunidad GDG en un solo lugar.",
+  "El motor de búsqueda definitivo para descubrir hackatones globales en un solo lugar.",
   "Pregunta en lenguaje natural y deja que la IA encuentre el match perfecto.",
 ];
 

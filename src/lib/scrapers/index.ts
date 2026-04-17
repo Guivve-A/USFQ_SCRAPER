@@ -7,6 +7,7 @@ import {
   recordScrapeSourceMetric,
   upsertHackathon,
 } from "@/lib/db/queries";
+import { normalizeRegion } from "@/lib/region";
 
 import { scrapeDevpost } from "./devpost";
 import { scrapeMLH } from "./mlh";
@@ -436,12 +437,16 @@ function normalizeHackathon(item: Partial<Hackathon>): Partial<Hackathon> | null
     return null;
   }
 
+  const isOnline = item.is_online ?? false;
+  const region = item.region ?? normalizeRegion(item.location ?? null, isOnline);
+
   return {
     ...item,
     title,
     url,
     tags: Array.from(new Set(item.tags ?? [])),
-    is_online: item.is_online ?? false,
+    is_online: isOnline,
+    region,
   };
 }
 

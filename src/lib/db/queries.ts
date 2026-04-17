@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { rankCatalogHackathons } from "@/lib/ranking";
+import type { Region } from "@/lib/region";
 import type { Hackathon, Platform } from "@/types/hackathon";
 
 export type MatchOptions = {
@@ -8,6 +9,8 @@ export type MatchOptions = {
   matchCount?: number;
   online?: boolean;
   platform?: Platform;
+  regions?: Region[] | null;
+  includeUnknownOnline?: boolean;
 };
 
 type HackathonRow = {
@@ -27,6 +30,7 @@ type HackathonRow = {
   tags: string[] | null;
   image_url: string | null;
   organizer: string | null;
+  region: Region | null;
   embedding: number[] | null;
   scraped_at: string;
   created_at: string;
@@ -42,6 +46,8 @@ type SearchRpcParams = {
   match_count: number;
   filter_online: boolean | null;
   filter_platform: string | null;
+  filter_regions: Region[] | null;
+  include_unknown_region_online: boolean;
 };
 
 type ScrapeSourceMetricRow = {
@@ -127,6 +133,7 @@ function toHackathon(row: HackathonRow): Hackathon {
     tags: row.tags ?? [],
     image_url: row.image_url,
     organizer: row.organizer,
+    region: row.region ?? null,
     scraped_at: row.scraped_at,
     created_at: row.created_at,
   };
@@ -173,6 +180,7 @@ export async function upsertHackathon(
     tags: hackathon.tags,
     image_url: hackathon.image_url,
     organizer: hackathon.organizer,
+    region: hackathon.region,
     scraped_at: hackathon.scraped_at,
     created_at: hackathon.created_at,
   });
@@ -200,6 +208,9 @@ export async function matchHackathonsByEmbedding(
     match_count: options.matchCount ?? 10,
     filter_online: options.online ?? null,
     filter_platform: options.platform ?? null,
+    filter_regions:
+      options.regions && options.regions.length > 0 ? options.regions : null,
+    include_unknown_region_online: options.includeUnknownOnline ?? true,
   };
 
   const { data, error } = await getReadClient().rpc("match_hackathons", rpcParams);
@@ -282,15 +293,26 @@ export async function getHackathonByUrl(url: string): Promise<Hackathon | null> 
   return toHackathon(data);
 }
 
-export async function getRecentHackathons(limit = 10): Promise<Hackathon[]> {
+export type RecentHackathonsOptions = {
+  regions?: Region[] | null;
+  includeUnknownOnline?: boolean;
+};
+
+export async function getRecentHackathons(
+  limit = 10,
+  options: RecentHackathonsOptions = {}
+): Promise<Hackathon[]> {
   const fetchLimit = Math.max(limit, 60);
 
-  const { data, error } = await getReadClient()
+  let query = getReadClient()
     .from("hackathons")
     .select("*")
     .order("created_at", { ascending: false })
-    .limit(fetchLimit)
-    .returns<HackathonRow[]>();
+    .limit(fetchLimit);
+
+  query = applyRegionFilter(query, options.regions, options.includeUnknownOnline);
+
+  const { data, error } = await query.returns<HackathonRow[]>();
 
   if (error) {
     throw new Error(`Failed to get recent hackathons: ${error.message}`);
@@ -298,6 +320,28 @@ export async function getRecentHackathons(limit = 10): Promise<Hackathon[]> {
 
   const ranked = rankCatalogHackathons((data ?? []).map(toHackathon));
   return ranked.slice(0, limit);
+}
+
+type SupabaseFilterBuilder = ReturnType<
+  ReturnType<SupabaseClient["from"]>["select"]
+>;
+
+function applyRegionFilter(
+  query: SupabaseFilterBuilder,
+  regions: Region[] | null | undefined,
+  includeUnknownOnline: boolean | undefined
+): SupabaseFilterBuilder {
+  if (!regions || regions.length === 0) return query;
+
+  const regionList = regions
+    .map((region) => `"${region}"`)
+    .join(",");
+
+  if (includeUnknownOnline ?? true) {
+    return query.or(`region.in.(${regionList}),and(region.is.null,is_online.eq.true)`);
+  }
+
+  return query.in("region", regions);
 }
 
 export type SystemStats = {
@@ -380,6 +424,8 @@ export type ListHackathonsOptions = {
   platform?: Platform;
   hasPrize?: boolean;
   limit?: number;
+  regions?: Region[] | null;
+  includeUnknownOnline?: boolean;
 };
 
 export async function listHackathons(
@@ -403,6 +449,8 @@ export async function listHackathons(
   if (options.hasPrize) {
     query = query.not("prize_pool", "is", null);
   }
+
+  query = applyRegionFilter(query, options.regions, options.includeUnknownOnline);
 
   const { data, error } = await query.returns<HackathonRow[]>();
 
