@@ -1,9 +1,17 @@
 import Link from "next/link";
 import { Compass } from "lucide-react";
 
-export function SiteHeader() {
+interface SiteHeaderProps {
+  overlay?: boolean;
+}
+
+export function SiteHeader({ overlay = false }: SiteHeaderProps) {
+  const containerClass = overlay
+    ? "fixed inset-x-0 top-3 z-50 px-3 sm:px-5"
+    : "sticky top-3 z-50 px-3 sm:px-5";
+
   return (
-    <header className="sticky top-3 z-50 px-3 sm:px-5">
+    <header className={containerClass}>
       <div className="mx-auto w-full max-w-6xl">
         <div className="relative flex h-[3rem] items-center justify-between overflow-hidden rounded-2xl border border-white/[0.14] bg-[linear-gradient(105deg,rgba(8,12,22,0.86)_0%,rgba(31,41,55,0.64)_48%,rgba(10,14,24,0.82)_100%)] px-3 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_16px_44px_-22px_rgba(2,6,23,0.95)] backdrop-blur-xl backdrop-saturate-150 sm:h-[3.2rem] sm:px-4">
           <div

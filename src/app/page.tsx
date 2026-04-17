@@ -16,7 +16,7 @@ export default async function HomePage() {
 
   return (
     <>
-      <SiteHeader />
+      <SiteHeader overlay />
       <main className="flex flex-1 flex-col">
         <HomeExperience recent={recent} />
       </main>
