@@ -2,12 +2,17 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { Calendar, MapPin, Trophy, Wifi } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { Hackathon, Platform } from "@/types/hackathon";
+
+// 1×1 transparent pixel — used as blurDataURL so the slot has color while loading
+const BLUR_PLACEHOLDER =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
 const PLATFORM_LABEL: Record<Platform, string> = {
   devpost: "Devpost",
@@ -48,6 +53,7 @@ export function HackathonCard({ hackathon, className }: HackathonCardProps) {
   const deadline = formatDate(hackathon.deadline);
   const visibleTags = hackathon.tags.slice(0, 3);
   const extraTags = Math.max(0, hackathon.tags.length - visibleTags.length);
+  const [imgError, setImgError] = useState(false);
 
   return (
     <Link
@@ -64,14 +70,16 @@ export function HackathonCard({ hackathon, className }: HackathonCardProps) {
       />
 
       <div className="relative aspect-[16/9] w-full overflow-hidden bg-black/40">
-        {hackathon.image_url ? (
+        {hackathon.image_url && !imgError ? (
           <Image
             src={hackathon.image_url}
             alt={hackathon.title}
             fill
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             className="object-cover transition-transform duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.08]"
-            unoptimized
+            placeholder="blur"
+            blurDataURL={BLUR_PLACEHOLDER}
+            onError={() => setImgError(true)}
           />
         ) : (
           <div
