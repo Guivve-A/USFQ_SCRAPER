@@ -1,13 +1,14 @@
 import type { Hackathon, Platform } from "@/types/hackathon";
 import {
-  getScrapeSourceHealth,
+  bulkUpsertHackathons,
   getHackathonByUrl,
+  getScrapeSourceHealth,
   pruneExpiredByDeadline,
   pruneStaleByPlatform,
   recordScrapeSourceMetric,
-  upsertHackathon,
 } from "@/lib/db/queries";
 import { normalizeRegion } from "@/lib/region";
+import { sanitizeHackathon } from "./sanitize";
 
 import { scrapeDevpost } from "./devpost";
 import { scrapeMLH } from "./mlh";
@@ -45,6 +46,15 @@ type CollectedHackathon = {
   item: Partial<Hackathon>;
 };
 
+export type ScrapeSourceReport = {
+  source: string;
+  platform: Platform;
+  status: "success" | "failed";
+  fetched: number;
+  durationMs: number;
+  reason: string | null;
+};
+
 export type RunAllScrapersResult = {
   total: number;
   inserted: number;
@@ -53,6 +63,8 @@ export type RunAllScrapersResult = {
   errors: string[];
   alerts: string[];
   sources: Record<string, { status: "success" | "failed"; fetched: number }>;
+  report: ScrapeSourceReport[];
+  durationMs: number;
 };
 
 export type ScrapeDiagnosticStage =
@@ -903,13 +915,25 @@ export async function runScrapersDiagnostics(
 
 export async function runAllScrapers(): Promise<RunAllScrapersResult> {
   const runStartedAt = new Date().toISOString();
+  const runStartHrMs = Date.now();
 
   const tasks = createScraperTasks();
 
   console.info(
     `[scrapers] Starting ${tasks.length} scrapers in parallel at ${runStartedAt}.`
   );
-  const settled = await Promise.allSettled(tasks.map((task) => task.run()));
+  const taskDurations: number[] = new Array(tasks.length).fill(0);
+  const settled = await Promise.allSettled(
+    tasks.map(async (task, idx) => {
+      const start = Date.now();
+      try {
+        return await task.run();
+      } finally {
+        taskDurations[idx] = Date.now() - start;
+      }
+    })
+  );
+  const report: ScrapeSourceReport[] = [];
 
   const collected: Partial<Hackathon>[] = [];
   const errors: string[] = [];
@@ -935,6 +959,14 @@ export async function runAllScrapers(): Promise<RunAllScrapersResult> {
         status: "success",
         fetched: result.value.length,
       };
+      report.push({
+        source: task.name,
+        platform: task.platform,
+        status: "success",
+        fetched: result.value.length,
+        durationMs: taskDurations[index],
+        reason: null,
+      });
       console.info(
         `[scrapers] ${task.name} succeeded with ${result.value.length} items.`
       );
@@ -964,6 +996,14 @@ export async function runAllScrapers(): Promise<RunAllScrapersResult> {
         ? result.reason.message
         : "Unknown scraper failure";
     sourceOutcomes[task.name] = { status: "failed", fetched: 0 };
+    report.push({
+      source: task.name,
+      platform: task.platform,
+      status: "failed",
+      fetched: 0,
+      durationMs: taskDurations[index],
+      reason: message,
+    });
     errors.push(`${task.name}: ${message}`);
     console.error(`[scrapers] ${task.name} failed: ${message}`);
 
@@ -1011,29 +1051,47 @@ export async function runAllScrapers(): Promise<RunAllScrapersResult> {
     );
   }
 
+  const sanitizedRows: Array<Partial<Hackathon>> = [];
+  let sanitizeRejected = 0;
+  let sanitizeDateDrops = 0;
+  let sanitizeClamps = 0;
+
+  for (const item of semanticDeduped.items) {
+    const { row, rejectionReason, report } = sanitizeHackathon(item);
+    if (!row) {
+      sanitizeRejected += 1;
+      errors.push(`sanitize:${item.url ?? "?"}: ${rejectionReason}`);
+      continue;
+    }
+    sanitizeDateDrops += report.dateFieldsDropped.length;
+    sanitizeClamps += report.clampedFields.length;
+    sanitizedRows.push({ ...row, scraped_at: runStartedAt });
+  }
+
+  if (sanitizeRejected > 0 || sanitizeDateDrops > 0 || sanitizeClamps > 0) {
+    console.info(
+      `[scrapers] Sanitize: rejected=${sanitizeRejected}, dateDrops=${sanitizeDateDrops}, clamps=${sanitizeClamps}.`
+    );
+  }
+
   let inserted = 0;
   let updated = 0;
 
-  for (const item of semanticDeduped.items) {
-    const url = item.url;
-    if (!url) {
-      continue;
+  try {
+    const bulkResult = await bulkUpsertHackathons(sanitizedRows);
+    inserted = bulkResult.inserted;
+    updated = bulkResult.updated;
+    if (bulkResult.failed > 0) {
+      errors.push(...bulkResult.errors);
+      console.error(
+        `[scrapers] Bulk upsert: ${bulkResult.failed} rows failed across chunks.`
+      );
     }
-
-    try {
-      const existing = await getHackathonByUrl(url);
-      await upsertHackathon({ ...item, scraped_at: runStartedAt });
-
-      if (existing) {
-        updated += 1;
-      } else {
-        inserted += 1;
-      }
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unknown upsert failure";
-      errors.push(`upsert:${url}: ${message}`);
-    }
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unknown bulk upsert failure";
+    errors.push(`bulk-upsert: ${message}`);
+    console.error(`[scrapers] Bulk upsert failed: ${message}`);
   }
 
   let staleDeleted = 0;
@@ -1104,6 +1162,9 @@ export async function runAllScrapers(): Promise<RunAllScrapersResult> {
     console.warn("[scrapers] Unable to compute source health alerts:", error);
   }
 
+  const durationMs = Date.now() - runStartHrMs;
+  report.sort((a, b) => a.source.localeCompare(b.source));
+
   const summary: RunAllScrapersResult = {
     total: semanticDeduped.items.length,
     inserted,
@@ -1112,10 +1173,30 @@ export async function runAllScrapers(): Promise<RunAllScrapersResult> {
     errors,
     alerts,
     sources: sourceOutcomes,
+    report,
+    durationMs,
   };
 
+  try {
+    console.info(
+      `[scrapers] Run report (${(durationMs / 1000).toFixed(1)}s total):`
+    );
+    console.table(
+      report.map((r) => ({
+        source: r.source,
+        platform: r.platform,
+        status: r.status,
+        fetched: r.fetched,
+        ms: r.durationMs,
+        reason: r.reason ?? "",
+      }))
+    );
+  } catch {
+    // console.table may not be available in every runtime; ignore.
+  }
+
   console.info(
-    `[scrapers] Done. total=${summary.total}, inserted=${summary.inserted}, updated=${summary.updated}, deleted_stale=${summary.deleted.stale}, deleted_expired=${summary.deleted.expired}, errors=${summary.errors.length}`
+    `[scrapers] Done. total=${summary.total}, inserted=${summary.inserted}, updated=${summary.updated}, deleted_stale=${summary.deleted.stale}, deleted_expired=${summary.deleted.expired}, errors=${summary.errors.length}, durationMs=${durationMs}`
   );
 
   return summary;

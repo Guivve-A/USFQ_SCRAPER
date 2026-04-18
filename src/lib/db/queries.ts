@@ -204,6 +204,99 @@ export async function upsertHackathon(
   return toHackathon(data);
 }
 
+export type BulkUpsertResult = {
+  inserted: number;
+  updated: number;
+  failed: number;
+  errors: string[];
+};
+
+const BULK_UPSERT_CHUNK_SIZE = 500;
+
+export async function getExistingHackathonUrls(
+  urls: string[]
+): Promise<Set<string>> {
+  if (urls.length === 0) return new Set();
+
+  const existing = new Set<string>();
+  for (let i = 0; i < urls.length; i += BULK_UPSERT_CHUNK_SIZE) {
+    const chunk = urls.slice(i, i + BULK_UPSERT_CHUNK_SIZE);
+    const { data, error } = await getReadClient()
+      .from("hackathons")
+      .select("url")
+      .in("url", chunk);
+
+    if (error) {
+      throw new Error(`Failed to lookup existing urls: ${error.message}`);
+    }
+
+    for (const row of (data ?? []) as Array<{ url: string }>) {
+      existing.add(row.url);
+    }
+  }
+  return existing;
+}
+
+export async function bulkUpsertHackathons(
+  rows: Array<Partial<Hackathon>>
+): Promise<BulkUpsertResult> {
+  const result: BulkUpsertResult = {
+    inserted: 0,
+    updated: 0,
+    failed: 0,
+    errors: [],
+  };
+  if (rows.length === 0) return result;
+
+  const urls = rows.map((r) => r.url).filter((u): u is string => Boolean(u));
+  const existingUrls = await getExistingHackathonUrls(urls);
+
+  for (let i = 0; i < rows.length; i += BULK_UPSERT_CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + BULK_UPSERT_CHUNK_SIZE);
+    const payload = chunk.map((h) =>
+      cleanPayload({
+        title: h.title,
+        description: h.description,
+        desc_translated: h.desc_translated,
+        url: h.url,
+        platform: h.platform,
+        start_date: h.start_date,
+        end_date: h.end_date,
+        deadline: h.deadline,
+        location: h.location,
+        is_online: h.is_online,
+        prize_pool: h.prize_pool,
+        prize_amount: h.prize_amount,
+        tags: h.tags,
+        image_url: h.image_url,
+        organizer: h.organizer,
+        region: h.region,
+        scraped_at: h.scraped_at,
+      })
+    );
+
+    const { error } = await getWriteClient()
+      .from("hackathons")
+      .upsert(payload, { onConflict: "url" });
+
+    if (error) {
+      result.failed += chunk.length;
+      result.errors.push(`bulk-upsert chunk ${i}: ${error.message}`);
+      continue;
+    }
+
+    for (const row of chunk) {
+      if (row.url && existingUrls.has(row.url)) {
+        result.updated += 1;
+      } else {
+        result.inserted += 1;
+      }
+    }
+  }
+
+  return result;
+}
+
 export async function matchHackathonsByEmbedding(
   embedding: number[],
   options: MatchOptions = {}

@@ -11,7 +11,7 @@ export async function GET(request: Request): Promise<Response> {
   if (!auth.ok) return auth.response;
 
   try {
-    console.info("[cron/scrape] Starting daily scrape job.");
+    console.info("[cron/scrape] Starting weekly scrape job.");
     const result = await runAllScrapers();
 
     console.info(
