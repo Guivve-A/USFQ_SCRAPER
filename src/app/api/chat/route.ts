@@ -215,7 +215,7 @@ function getLatestUserText(messages: Array<Omit<UIMessage, "id">>): string | nul
 
 export async function POST(request: Request): Promise<Response> {
   const ip = getClientIp(request);
-  const rate = checkRateLimit({
+  const rate = await checkRateLimit({
     key: `chat:${ip}`,
     limit: CHAT_RATE_LIMIT,
     windowMs: CHAT_WINDOW_MS,

@@ -82,7 +82,7 @@ function isSpamLike(input: { title: string; description: string; source?: string
 
 export async function POST(request: Request): Promise<Response> {
   const ip = getClientIp(request);
-  const rate = checkRateLimit({
+  const rate = await checkRateLimit({
     key: `suggestions:${ip}`,
     limit: SUGGESTIONS_RATE_LIMIT,
     windowMs: SUGGESTIONS_WINDOW_MS,

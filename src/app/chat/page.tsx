@@ -35,17 +35,76 @@ const SUGGESTIONS = [
   "Competencias de ciberseguridad presenciales",
 ];
 
+const ALLOWED_MARKDOWN_TAGS = [
+  "p",
+  "br",
+  "ul",
+  "ol",
+  "li",
+  "strong",
+  "em",
+  "code",
+  "pre",
+  "blockquote",
+  "a",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "hr",
+];
+
+const ALLOWED_MARKDOWN_ATTRS = ["href", "title", "target", "rel"];
+const SAFE_URL_PATTERN = /^(https?:|mailto:|\/|#)/i;
+
 let domPurifyConfigured = false;
 
 function ensureDomPurifyConfig() {
   if (domPurifyConfigured) return;
 
   DOMPurify.addHook("uponSanitizeAttribute", (_node: unknown, data: unknown) => {
-    const attrData = data as { attrName?: string; keepAttr?: boolean };
+    const attrData = data as {
+      attrName?: string;
+      attrValue?: string;
+      keepAttr?: boolean;
+    };
     const attrName = attrData.attrName?.toLowerCase() ?? "";
+    const attrValue = attrData.attrValue?.trim() ?? "";
 
-    if (attrName.startsWith("on")) {
+    if (attrName.startsWith("on") || attrName === "style") {
       attrData.keepAttr = false;
+      return;
+    }
+
+    if (
+      (attrName === "href" || attrName === "src" || attrName === "xlink:href") &&
+      (!SAFE_URL_PATTERN.test(attrValue) || /^(javascript:|data:|vbscript:)/i.test(attrValue))
+    ) {
+      attrData.keepAttr = false;
+    }
+  });
+
+  DOMPurify.addHook("afterSanitizeAttributes", (node: unknown) => {
+    const maybeElement = node as {
+      nodeName?: string;
+      getAttribute?: (name: string) => string | null;
+      setAttribute?: (name: string, value: string) => void;
+    };
+
+    if (
+      maybeElement.nodeName?.toLowerCase() === "a" &&
+      maybeElement.getAttribute &&
+      maybeElement.setAttribute
+    ) {
+      const href = maybeElement.getAttribute("href") ?? "";
+      const isExternal = /^https?:\/\//i.test(href);
+
+      if (isExternal) {
+        maybeElement.setAttribute("target", "_blank");
+        maybeElement.setAttribute("rel", "noopener noreferrer nofollow");
+      } else {
+        maybeElement.setAttribute("rel", "nofollow");
+      }
     }
   });
 
@@ -61,8 +120,28 @@ function renderSafeMarkdown(markdown: string): string {
   }) as string;
 
   return DOMPurify.sanitize(rawHtml, {
-    FORBID_TAGS: ["script", "iframe"],
+    ALLOWED_TAGS: ALLOWED_MARKDOWN_TAGS,
+    ALLOWED_ATTR: ALLOWED_MARKDOWN_ATTRS,
+    FORBID_TAGS: [
+      "script",
+      "iframe",
+      "object",
+      "embed",
+      "svg",
+      "math",
+      "style",
+      "form",
+      "input",
+      "button",
+      "link",
+      "meta",
+      "base",
+    ],
+    FORBID_ATTR: ["style"],
+    ALLOW_DATA_ATTR: false,
+    ALLOW_ARIA_ATTR: false,
     ALLOW_UNKNOWN_PROTOCOLS: false,
+    ALLOWED_URI_REGEXP: SAFE_URL_PATTERN,
   });
 }
 

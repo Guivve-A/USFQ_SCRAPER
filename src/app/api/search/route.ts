@@ -31,7 +31,7 @@ const searchSchema = z.object({
 
 export async function GET(request: Request): Promise<Response> {
   const ip = getClientIp(request);
-  const rate = checkRateLimit({
+  const rate = await checkRateLimit({
     key: `search:${ip}`,
     limit: SEARCH_RATE_LIMIT,
     windowMs: SEARCH_WINDOW_MS,
