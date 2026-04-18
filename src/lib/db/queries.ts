@@ -471,12 +471,20 @@ export async function listHackathons(
   const from = (page - 1) * LIST_PAGE_SIZE;
   const to = from + LIST_PAGE_SIZE; // inclusive → fetches PAGE_SIZE + 1 to detect next page
 
+  // Fetch a larger pool so the in-memory ranker has material to work with.
+  // We retrieve 3× the page size (minimum 72) then rank, slice to PAGE_SIZE,
+  // and detect hasNextPage from the raw pool size.
+  const FETCH_MULTIPLIER = 3;
+  const fetchSize = LIST_PAGE_SIZE * FETCH_MULTIPLIER;
+  const fetchFrom = (page - 1) * LIST_PAGE_SIZE;
+  const fetchTo = fetchFrom + fetchSize;
+
   let query = getReadClient()
     .from("hackathons")
     .select("*")
+    .order("deadline", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false })
-    .order("id", { ascending: false })
-    .range(from, to);
+    .range(fetchFrom, fetchTo);
 
   if (options.online !== undefined) {
     query = query.eq("is_online", options.online);
@@ -499,7 +507,8 @@ export async function listHackathons(
 
   const rows = data ?? [];
   const hasNextPage = rows.length > LIST_PAGE_SIZE;
-  const items = rows.slice(0, LIST_PAGE_SIZE).map(toHackathon);
+  const ranked = rankCatalogHackathons(rows.map(toHackathon));
+  const items = ranked.slice(0, LIST_PAGE_SIZE);
 
   return { items, hasNextPage, page };
 }

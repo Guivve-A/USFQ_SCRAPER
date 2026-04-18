@@ -114,6 +114,103 @@ const TRACKING_QUERY_PARAMS = new Set([
   "source",
   "si",
 ]);
+// Maps lowercased/stripped tag variants to a single canonical slug.
+const TAG_NORMALIZATION_MAP: Record<string, string> = {
+  // AI
+  "ai": "artificial-intelligence",
+  "ia": "artificial-intelligence",
+  "artificial intelligence": "artificial-intelligence",
+  "inteligencia artificial": "artificial-intelligence",
+  // Machine Learning
+  "ml": "machine-learning",
+  "machine learning": "machine-learning",
+  "aprendizaje automatico": "machine-learning",
+  // Deep Learning
+  "deep learning": "deep-learning",
+  // NLP
+  "nlp": "nlp",
+  "natural language processing": "nlp",
+  "procesamiento de lenguaje natural": "nlp",
+  // Computer Vision
+  "computer vision": "computer-vision",
+  // Data Science
+  "data science": "data-science",
+  "data analysis": "data-science",
+  "analytics": "data-science",
+  "big data": "data-science",
+  // Web3 / Blockchain
+  "blockchain": "web3",
+  "crypto": "web3",
+  "cryptocurrency": "web3",
+  "web3": "web3",
+  "nft": "web3",
+  "defi": "web3",
+  // IoT
+  "iot": "iot",
+  "internet of things": "iot",
+  "internet de las cosas": "iot",
+  // AR/VR
+  "vr": "ar-vr",
+  "xr": "ar-vr",
+  "ar/vr": "ar-vr",
+  "augmented reality": "ar-vr",
+  "virtual reality": "ar-vr",
+  "mixed reality": "ar-vr",
+  // Open Source
+  "open source": "open-source",
+  "opensource": "open-source",
+  // Health
+  "healthcare": "health",
+  "medtech": "health",
+  "healthtech": "health",
+  "biotech": "health",
+  // Fintech
+  "fintech": "fintech",
+  "finance": "fintech",
+  "financial technology": "fintech",
+  // Education
+  "edtech": "education",
+  "edu": "education",
+  // Sustainability
+  "sustainability": "sustainability",
+  "climate": "sustainability",
+  "cleantech": "sustainability",
+  "green tech": "sustainability",
+  "greentech": "sustainability",
+  // Cybersecurity
+  "cybersecurity": "cybersecurity",
+  "infosec": "cybersecurity",
+  "ctf": "cybersecurity",
+  // Cloud
+  "cloud computing": "cloud",
+  "aws": "cloud",
+  "azure": "cloud",
+  "gcp": "cloud",
+  // Mobile
+  "android": "mobile",
+  "ios": "mobile",
+  // Gaming
+  "game dev": "gaming",
+  "game development": "gaming",
+  "gamedev": "gaming",
+};
+
+function normalizeTags(tags: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const raw of tags) {
+    const key = raw.toLowerCase().replace(/[^a-z0-9\s-]/g, "").trim();
+    const canonical = TAG_NORMALIZATION_MAP[key] ?? (key.length > 0 ? key : null);
+    if (canonical && !seen.has(canonical)) {
+      seen.add(canonical);
+      result.push(canonical);
+    }
+  }
+
+  return result;
+}
+
 const TITLE_STOPWORDS = new Set([
   "the",
   "and",
@@ -464,7 +561,7 @@ function normalizeHackathon(item: Partial<Hackathon>): Partial<Hackathon> | null
     ...item,
     title,
     url,
-    tags: Array.from(new Set(item.tags ?? [])),
+    tags: normalizeTags(Array.from(new Set(item.tags ?? []))),
     is_online: isOnline,
     region,
   };

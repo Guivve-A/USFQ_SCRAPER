@@ -69,19 +69,52 @@ function onlinePriority(item: Hackathon): number {
   return item.is_online ? 1 : 0.15;
 }
 
+/**
+ * Scores how relevant the event is to Ecuadorian/LATAM participants.
+ * Ecuador presential > LATAM > globally accessible online > presential elsewhere.
+ */
+function regionScore(item: Hackathon): number {
+  const { region, is_online } = item;
+
+  if (region === "ecuador") return 1.0;
+  if (region === "latam") return 0.72;
+
+  if (is_online) {
+    if (region === "global" || region === null) return 0.50;
+    if (region === "other") return 0.35;
+  }
+
+  // Presential event outside Ecuador/LATAM — largely inaccessible
+  return 0.08;
+}
+
+/**
+ * Logarithmic prize score: $1 k → ~0.50, $10 k → ~0.67, $100 k → ~0.83.
+ * Falls back to 0.4 if only prize_pool text exists, 0.1 if nothing.
+ */
+function prizeScore(item: Hackathon): number {
+  if (item.prize_amount && item.prize_amount > 0) {
+    return clamp01(Math.log10(item.prize_amount + 1) / 6);
+  }
+  if (item.prize_pool) return 0.4;
+  return 0.1;
+}
+
 function semanticRankScore(item: SemanticHit): number {
   const similarity = clamp01(item.similarity);
   const freshness = freshnessScore(item.scraped_at ?? item.created_at ?? null);
   const deadline = deadlineProximityScore(item.deadline ?? item.start_date);
   const quality = qualityScore(item);
   const online = onlinePriority(item);
+  const region = regionScore(item);
 
   return (
-    similarity * 0.62 +
-    online * 0.16 +
-    deadline * 0.12 +
-    quality * 0.07 +
-    freshness * 0.03
+    similarity * 0.55 +
+    region   * 0.18 +
+    online   * 0.12 +
+    deadline * 0.09 +
+    quality  * 0.04 +
+    freshness * 0.02
   );
 }
 
@@ -90,12 +123,16 @@ function catalogRankScore(item: Hackathon): number {
   const deadline = deadlineProximityScore(item.deadline ?? item.start_date);
   const quality = qualityScore(item);
   const online = onlinePriority(item);
+  const region = regionScore(item);
+  const prize = prizeScore(item);
 
   return (
-    online * 0.4 +
-    deadline * 0.3 +
-    freshness * 0.17 +
-    quality * 0.13
+    region   * 0.35 +
+    deadline * 0.28 +
+    online   * 0.15 +
+    quality  * 0.12 +
+    prize    * 0.07 +
+    freshness * 0.03
   );
 }
 
