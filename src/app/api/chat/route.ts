@@ -37,6 +37,20 @@ if (!process.env.FIREWORKS_API_KEY) {
   );
 }
 
+const GENERAL_FIREWORKS_MODEL =
+  process.env.FIREWORKS_MODEL?.trim() ||
+  "accounts/fireworks/models/llama-v3p3-70b-instruct";
+
+const TOOL_FIREWORKS_MODEL =
+  process.env.FIREWORKS_TOOL_MODEL?.trim() ||
+  "accounts/fireworks/models/deepseek-v3p2";
+
+const SEARCH_INTENT_REGEX =
+  /\b(hackathon|hackathons|hackatones|evento|eventos|competencia|competencias|challenge|premio|deadline|inscripcion|inscripciones|aplicar|postular|convocatoria|devpost|mlh|eventbrite|gdg|lablab|online|presencial|ecuador|latam|global|internacional)\b/i;
+
+const GENERAL_CHAT_REGEX =
+  /\b(hola|hello|hi|buenas|quien eres|quién eres|who are you|como estas|cómo estás|gracias|thanks)\b/i;
+
 const chatInputTextSchema = createSanitizedTextSchema(MAX_CHAT_INPUT_CHARS, {
   requiredMessage: "User message is required",
   maxMessage: `User message must be at most ${MAX_CHAT_INPUT_CHARS} characters`,
@@ -92,6 +106,8 @@ Reglas de herramienta:
 - Usa searchHackathons SOLO cuando el usuario este buscando, comparando o pidiendo recomendaciones de eventos.
 - Para saludos, dudas generales o preguntas no relacionadas a eventos, NO llames herramientas.
 - Cuando necesites buscar hackatones, DEBES usar obligatoriamente la llamada a la herramienta nativa (tool call). NUNCA imprimas el JSON de la funcion dentro de tu respuesta de texto. Responde directamente al usuario usando los resultados devueltos por la herramienta.
+- Limite estricto: puedes invocar 'searchHackathons' como MAXIMO UNA VEZ por respuesta del asistente.
+- Si 'searchHackathons' devuelve [] o "Error en base de datos.", NO vuelvas a invocar herramientas en ese turno y responde en texto al usuario.
 - DIRECTIVA CRITICA DE HERRAMIENTAS: Cuando el usuario pida recomendaciones de eventos, hackatones o pregunte que hay disponible, TIENES PROHIBIDO dar respuestas genericas o inventar datos. DEBES seguir estos pasos estrictamente: 1) Ejecutar la herramienta 'searchHackathons' con los parametros adecuados. 2) Esperar los resultados reales. 3) Si obtienes resultados, muestralos en un formato claro usando Markdown (Titulo en negrita, fecha, plataforma y URL). 4) Si la herramienta no devuelve resultados, responde textualmente: 'No encontre eventos con esos criterios en este momento.'
 
 Reglas de alcance geografico (scope):
@@ -203,6 +219,19 @@ function getLatestUserText(messages: Array<Omit<UIMessage, "id">>): string | nul
   }
 
   return null;
+}
+
+function shouldUseSearchHackathonsTool(userText: string): boolean {
+  const normalized = sanitizeInputText(userText);
+  if (!normalized) return false;
+
+  const hasSearchIntent = SEARCH_INTENT_REGEX.test(normalized);
+  if (!hasSearchIntent) return false;
+
+  const isGeneralOnly = GENERAL_CHAT_REGEX.test(normalized) && !hasSearchIntent;
+  if (isGeneralOnly) return false;
+
+  return true;
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -356,18 +385,28 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
+    const shouldUseSearchTool = shouldUseSearchHackathonsTool(parsedUserText.data);
+    const selectedModel = shouldUseSearchTool
+      ? TOOL_FIREWORKS_MODEL
+      : GENERAL_FIREWORKS_MODEL;
+
+    console.log("[api/chat] routing", {
+      shouldUseSearchTool,
+      model: selectedModel,
+    });
+
     const modelMessages = await convertToModelMessages(messagesWithoutIds, { tools });
 
-    const result = streamText(
-      {
-        model: fireworks("accounts/fireworks/models/llama-v3p3-70b-instruct"),
-        system: SYSTEM_PROMPT,
-        messages: modelMessages,
-        tools,
-        maxSteps: 5,
-        stopWhen: stepCountIs(5),
-      } as Parameters<typeof streamText>[0]
-    );
+    const streamOptions = {
+      model: fireworks(selectedModel),
+      system: SYSTEM_PROMPT,
+      messages: modelMessages,
+      tools: shouldUseSearchTool ? tools : {},
+      maxSteps: 5,
+      stopWhen: shouldUseSearchTool ? stepCountIs(2) : stepCountIs(5),
+    } satisfies Parameters<typeof streamText>[0];
+
+    const result = streamText(streamOptions);
 
     return result.toUIMessageStreamResponse({
       sendReasoning: false,
