@@ -45,6 +45,10 @@ const nextConfig: NextConfig = {
   },
   images: {
     formats: ["image/avif", "image/webp"],
+    // Hold optimized variants at the edge for a year. Source URL uniqueness
+    // invalidates naturally; no need for custom Cache-Control headers on
+    // /_next/image (which Next.js also explicitly warns against overriding).
+    minimumCacheTTL: 31_536_000,
     remotePatterns: [
       // Devpost
       { protocol: "https", hostname: "challengepost-s3-challengepost.netdna-ssl.com" },
@@ -88,18 +92,6 @@ const nextConfig: NextConfig = {
       // visits skip the network entirely.
       {
         source: "/textures/:path*",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=31536000, immutable",
-          },
-        ],
-      },
-      // Next/Image-optimized responses: cache the generated variants
-      // aggressively at the edge. The underlying source URL already
-      // determines uniqueness, so immutable is safe here too.
-      {
-        source: "/_next/image:path*",
         headers: [
           {
             key: "Cache-Control",
