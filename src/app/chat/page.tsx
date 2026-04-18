@@ -3,6 +3,7 @@
 import { ArrowUp, Bot, Loader2, Sparkles, Trophy, User } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
+import ReactMarkdown from "react-markdown";
 
 import { SiteHeader } from "@/components/SiteHeader";
 import { useChat } from "@/hooks/useChat";
@@ -34,8 +35,32 @@ const SUGGESTIONS = [
 ];
 
 export default function ChatPage() {
-  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat();
+  const { messages, input, handleInputChange, handleSubmit, sendPrompt, isLoading } =
+    useChat();
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const isSearchToolRunning = messages.some((message) => {
+    const toolInvocations = (
+      message as {
+        toolInvocations?: Array<{ toolName?: string; state?: string }>;
+      }
+    ).toolInvocations;
+
+    const hasActiveToolInvocation = (toolInvocations ?? []).some(
+      (invocation) =>
+        invocation.toolName === "searchHackathons" &&
+        invocation.state !== "result" &&
+        invocation.state !== "output-available"
+    );
+
+    if (hasActiveToolInvocation) return true;
+
+    const parts = (message.parts ?? []) as ToolPart[];
+    return parts.some(
+      (part) =>
+        part.type === "tool-searchHackathons" && part.state !== "output-available"
+    );
+  });
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -90,12 +115,22 @@ export default function ChatPage() {
                         handleInputChange({
                           target: { value: suggestion },
                         } as unknown as React.ChangeEvent<HTMLInputElement>);
+                        void sendPrompt(suggestion);
                       }}
                       className="rounded-full border border-cyan-500/30 bg-transparent px-4 py-2 text-sm text-cyan-400 transition-all duration-300 hover:border-cyan-400 hover:bg-cyan-500/10 hover:shadow-[0_0_10px_rgba(34,211,238,0.2)]"
                     >
                       {suggestion}
                     </button>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {isSearchToolRunning && (
+              <div className="mx-4 mb-1 rounded-xl border border-cyan-500/20 bg-cyan-900/20 px-3 py-2 text-xs text-cyan-200 sm:mx-6">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  <span>Buscando en la base de datos global...</span>
                 </div>
               </div>
             )}
@@ -189,7 +224,31 @@ function PartRenderer({ part, isUser }: { part: ToolPart; isUser: boolean }) {
             : "border border-white/10 border-l-2 border-l-cyan-500 bg-white/5 text-gray-300"
         )}
       >
-        {text}
+        {isUser ? (
+          text
+        ) : (
+          <ReactMarkdown
+            components={{
+              p: ({ children }) => <p className="m-0">{children}</p>,
+              ul: ({ children }) => <ul className="list-disc space-y-1 pl-5">{children}</ul>,
+              ol: ({ children }) => <ol className="list-decimal space-y-1 pl-5">{children}</ol>,
+              li: ({ children }) => <li>{children}</li>,
+              strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+              a: ({ href, children }) => (
+                <a
+                  href={href ?? "#"}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="text-cyan-300 underline underline-offset-2 hover:text-cyan-200"
+                >
+                  {children}
+                </a>
+              ),
+            }}
+          >
+            {text}
+          </ReactMarkdown>
+        )}
       </div>
     );
   }

@@ -13,7 +13,7 @@ import { searchHackathons } from "@/lib/ai/search";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { SCOPE_VALUES, type Scope } from "@/lib/region";
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 export const maxDuration = 30;
 
 const CHAT_RATE_LIMIT = 12;
@@ -33,7 +33,7 @@ const fireworks = createOpenAI({
 
 const FIREWORKS_MODEL =
   process.env.FIREWORKS_MODEL?.trim() ||
-  "accounts/fireworks/models/deepseek-v3p2";
+  "accounts/fireworks/models/llama-v3p3-70b-instruct";
 
 const chatRequestSchema = z.object({
   messages: z.array(z.object({}).passthrough()).min(1).max(MAX_CHAT_MESSAGES),
@@ -63,20 +63,36 @@ const translateToolResponseSchema = z.object({
 });
 
 const SYSTEM_PROMPT = `Eres HackBot, un asistente experto en descubrir hackathons.
-Ayudas a desarrolladores, disenadores y cientificos de datos a encontrar competencias relevantes.
-Cuando el usuario busque eventos, usa SIEMPRE la herramienta searchHackathons antes de responder.
-Alcance geografico (parametro scope):
-- Por defecto usa 'ecuador-friendly' (hackathons en Ecuador, LATAM, y online globales accesibles desde Ecuador).
+Objetivo: responder rapido, util y con formato claro.
+
+Reglas de herramienta:
+- Usa searchHackathons SOLO cuando el usuario este buscando, comparando o pidiendo recomendaciones de eventos.
+- Para saludos, dudas generales o preguntas no relacionadas a eventos, NO llames herramientas.
+
+Reglas de alcance geografico (scope):
+- Por defecto usa 'ecuador-friendly' (Ecuador, LATAM y online globales accesibles desde Ecuador).
 - Si el usuario menciona "Ecuador", "eventos locales" o "presencial en Ecuador", usa scope='ecuador-only'.
 - Si menciona "LATAM" o "Latinoamerica", usa scope='latam-online'.
 - Si dice "globales", "mundiales" o "internacionales", usa scope='global-online'.
 - Solo usa scope='all' si pide explicitamente ver todo sin filtros.
-Si el usuario pide "eventos en Ecuador" NUNCA devuelvas eventos presenciales de otros paises.
-Presenta los resultados con: nombre, fecha, premios, link y una frase breve de por que es relevante.
-Si el usuario escribe en espanol, responde en espanol.
-Si escribe en ingles, responde en ingles.
-Se entusiasta pero conciso.
-Maximo 3-4 hackathons por respuesta a menos que el usuario pida mas.`;
+- Si pide "eventos en Ecuador", nunca devuelvas eventos presenciales de otros paises.
+
+Formato de salida cuando recomiendes hackathons (en Markdown):
+- Usa lista con maximo 3-4 resultados (a menos que pida mas).
+- Cada item debe incluir:
+  - **Titulo**
+  - Fecha
+  - Plataforma
+  - Premio (si existe)
+  - Link
+  - Una frase breve de por que encaja
+
+Idioma:
+- Si escribe en espanol, responde en espanol.
+- Si escribe en ingles, responde en ingles.
+
+Estilo:
+- Se conciso, evita bloques largos y repetitivos.`;
 
 function formatStreamError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);

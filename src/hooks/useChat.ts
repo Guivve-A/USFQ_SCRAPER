@@ -43,11 +43,20 @@ export function useChat() {
     await sendMessage({ text: content });
   };
 
+  const sendPrompt = async (prompt: string) => {
+    const content = prompt.trim();
+    if (!content) return;
+
+    setInput("");
+    await sendMessage({ text: content });
+  };
+
   return {
     messages,
     input,
     handleInputChange,
     handleSubmit,
+    sendPrompt,
     isLoading: status === "submitted" || status === "streaming",
   };
 }
