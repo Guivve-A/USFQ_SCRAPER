@@ -17,7 +17,6 @@ type HackathonRow = {
   id: number;
   title: string;
   description: string | null;
-  desc_translated: string | null;
   url: string;
   platform: string | null;
   start_date: string | null;
@@ -54,7 +53,7 @@ type SearchRpcParams = {
 // the 384-float payload would waste bandwidth unnecessarily.
 // All columns except the embedding vector — keeps list/browse queries lean.
 const HACKATHON_LIST_COLS =
-  "id,title,description,desc_translated,url,platform,start_date,end_date,deadline,location,is_online,prize_pool,prize_amount,tags,image_url,organizer,region,scraped_at,created_at";
+  "id,title,description,url,platform,start_date,end_date,deadline,location,is_online,prize_pool,prize_amount,tags,image_url,organizer,region,scraped_at,created_at";
 
 type ScrapeSourceMetricRow = {
   source: string;
@@ -174,7 +173,6 @@ export async function upsertHackathon(
   const payload = cleanPayload({
     title: hackathon.title,
     description: hackathon.description,
-    desc_translated: hackathon.desc_translated,
     url: hackathon.url,
     platform: hackathon.platform,
     start_date: hackathon.start_date,
@@ -258,7 +256,6 @@ export async function bulkUpsertHackathons(
       cleanPayload({
         title: h.title,
         description: h.description,
-        desc_translated: h.desc_translated,
         url: h.url,
         platform: h.platform,
         start_date: h.start_date,
