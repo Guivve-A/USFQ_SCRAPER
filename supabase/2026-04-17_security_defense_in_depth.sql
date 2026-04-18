@@ -47,7 +47,25 @@ GRANT SELECT ON TABLE public.hackathons TO authenticated;
 
 -- 2) RPC hardening: static SQL and bounded parameters ---------
 -- No string concatenation or EXECUTE dynamic SQL is used.
-CREATE OR REPLACE FUNCTION public.match_hackathons(
+-- Return shape changed (embedding removed), so we must drop then recreate.
+DROP FUNCTION IF EXISTS public.match_hackathons(
+  vector,
+  double precision,
+  integer,
+  boolean,
+  text,
+  text[],
+  boolean
+);
+DROP FUNCTION IF EXISTS public.match_hackathons(
+  vector,
+  double precision,
+  integer,
+  boolean,
+  text
+);
+
+CREATE FUNCTION public.match_hackathons(
   query_embedding VECTOR(384),
   match_threshold FLOAT,
   match_count INT,
@@ -156,15 +174,15 @@ $$;
 
 -- Function execution privileges for API-facing roles.
 REVOKE ALL
-  ON FUNCTION public.match_hackathons(vector, float, int, bool, text, text[], bool)
+  ON FUNCTION public.match_hackathons(vector, double precision, integer, boolean, text, text[], boolean)
   FROM PUBLIC;
 
 GRANT EXECUTE
-  ON FUNCTION public.match_hackathons(vector, float, int, bool, text, text[], bool)
+  ON FUNCTION public.match_hackathons(vector, double precision, integer, boolean, text, text[], boolean)
   TO anon, authenticated, service_role;
 
 COMMIT;
 
 -- Optional verification queries:
--- SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = 'hackathons';
--- SELECT schemaname, tablename, policyname, cmd, roles FROM pg_policies WHERE tablename = 'hackathons';
+SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname = 'hackathons';
+ SELECT schemaname, tablename, policyname, cmd, roles FROM pg_policies WHERE tablename = 'hackathons';
