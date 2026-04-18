@@ -395,6 +395,12 @@ function isSemanticDuplicate(
     return false;
   }
 
+  // Cross-platform duplicates (e.g. Devpost + Lablab) have different organizer names
+  // by design — trust title + date match alone when platforms differ.
+  if (current.platform !== incoming.platform) {
+    return true;
+  }
+
   const currentOrganizer = normalizeLabel(current.organizer);
   const incomingOrganizer = normalizeLabel(incoming.organizer);
   return organizersAreSimilar(currentOrganizer, incomingOrganizer);
@@ -429,11 +435,25 @@ function dedupeSemantically(items: Partial<Hackathon>[]): {
   return { items: unique, merged };
 }
 
+function hasMinimumViableContent(item: Partial<Hackathon>): boolean {
+  const hasDate = Boolean(item.start_date ?? item.deadline ?? item.end_date);
+  const hasDescription = Boolean(item.description && item.description.trim().length > 20);
+  return hasDate || hasDescription;
+}
+
 function normalizeHackathon(item: Partial<Hackathon>): Partial<Hackathon> | null {
   const title = cleanText(item.title);
   const url = item.url ? canonicalizeUrl(item.url) : null;
 
   if (!title || !url) {
+    return null;
+  }
+
+  if (title.length < 8) {
+    return null;
+  }
+
+  if (!hasMinimumViableContent(item)) {
     return null;
   }
 

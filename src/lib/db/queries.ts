@@ -223,6 +223,28 @@ export async function matchHackathonsByEmbedding(
   return rows.map((row) => ({ ...toHackathon(row), similarity: row.similarity }));
 }
 
+export async function getHackathonsWithoutTranslation(
+  limit = 30
+): Promise<Hackathon[]> {
+  const { data, error } = await getReadClient()
+    .from("hackathons")
+    .select("*")
+    .not("description", "is", null)
+    .is("desc_translated", null)
+    .gt("description", "")
+    .order("created_at", { ascending: false })
+    .limit(limit)
+    .returns<HackathonRow[]>();
+
+  if (error) {
+    throw new Error(`Failed to get hackathons without translation: ${error.message}`);
+  }
+
+  return (data ?? []).map(toHackathon).filter(
+    (h) => h.description && h.description.trim().length > 60
+  );
+}
+
 export async function getHackathonsWithoutEmbedding(
   limit = 200
 ): Promise<Hackathon[]> {
