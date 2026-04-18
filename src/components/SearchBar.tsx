@@ -193,6 +193,7 @@ export function SearchBar({
         <input
           value={value}
           onChange={(e) => setValue(e.target.value)}
+          maxLength={500}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           placeholder={placeholder}

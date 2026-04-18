@@ -1,9 +1,10 @@
 "use client";
 
 import { ArrowUp, Bot, Loader2, Sparkles, Trophy, User } from "lucide-react";
+import DOMPurify from "isomorphic-dompurify";
+import { marked } from "marked";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import ReactMarkdown from "react-markdown";
 
 import { SiteHeader } from "@/components/SiteHeader";
 import { useChat } from "@/hooks/useChat";
@@ -33,6 +34,37 @@ const SUGGESTIONS = [
   "Hackathons para principiantes en web3",
   "Competencias de ciberseguridad presenciales",
 ];
+
+let domPurifyConfigured = false;
+
+function ensureDomPurifyConfig() {
+  if (domPurifyConfigured) return;
+
+  DOMPurify.addHook("uponSanitizeAttribute", (_node: unknown, data: unknown) => {
+    const attrData = data as { attrName?: string; keepAttr?: boolean };
+    const attrName = attrData.attrName?.toLowerCase() ?? "";
+
+    if (attrName.startsWith("on")) {
+      attrData.keepAttr = false;
+    }
+  });
+
+  domPurifyConfigured = true;
+}
+
+function renderSafeMarkdown(markdown: string): string {
+  ensureDomPurifyConfig();
+
+  const rawHtml = marked.parse(markdown, {
+    gfm: true,
+    breaks: true,
+  }) as string;
+
+  return DOMPurify.sanitize(rawHtml, {
+    FORBID_TAGS: ["script", "iframe"],
+    ALLOW_UNKNOWN_PROTOCOLS: false,
+  });
+}
 
 export default function ChatPage() {
   const { messages, input, handleInputChange, handleSubmit, sendPrompt, isLoading } =
@@ -143,6 +175,7 @@ export default function ChatPage() {
                 <textarea
                   value={input}
                   onChange={handleInputChange}
+                  maxLength={500}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault();
@@ -215,39 +248,26 @@ function PartRenderer({ part, isUser }: { part: ToolPart; isUser: boolean }) {
   if (part.type === "text") {
     const text = (part as { text?: string }).text ?? "";
     if (!text) return null;
+
+    const sanitizedHtml = isUser ? "" : renderSafeMarkdown(text);
+
     return (
       <div
         className={cn(
           "whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
           isUser
             ? "border border-blue-500/30 bg-blue-600/20 text-blue-100"
-            : "border border-white/10 border-l-2 border-l-cyan-500 bg-white/5 text-gray-300"
+            : "border border-white/10 border-l-2 border-l-cyan-500 bg-white/5 text-gray-300 [&_a]:text-cyan-300 [&_a]:underline [&_a]:underline-offset-2 hover:[&_a]:text-cyan-200 [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-5 [&_p]:m-0 [&_p+p]:mt-2 [&_strong]:font-semibold [&_strong]:text-white [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5"
         )}
       >
         {isUser ? (
           text
         ) : (
-          <ReactMarkdown
-            components={{
-              p: ({ children }) => <p className="m-0">{children}</p>,
-              ul: ({ children }) => <ul className="list-disc space-y-1 pl-5">{children}</ul>,
-              ol: ({ children }) => <ol className="list-decimal space-y-1 pl-5">{children}</ol>,
-              li: ({ children }) => <li>{children}</li>,
-              strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
-              a: ({ href, children }) => (
-                <a
-                  href={href ?? "#"}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="text-cyan-300 underline underline-offset-2 hover:text-cyan-200"
-                >
-                  {children}
-                </a>
-              ),
-            }}
-          >
-            {text}
-          </ReactMarkdown>
+          <div
+            className="space-y-2"
+            // DOMPurify strips script/iframe tags and any on* attributes.
+            dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+          />
         )}
       </div>
     );
