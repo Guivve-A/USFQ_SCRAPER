@@ -1,12 +1,13 @@
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { EventDetailOverlay } from "@/components/EventDetailOverlay";
-import { getHackathonById } from "@/lib/db/queries";
+import { getHackathonById, getRelatedHackathons } from "@/lib/db/queries";
 import type { Platform } from "@/types/hackathon";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 3600;
 
 const PLATFORM_LABEL: Record<Platform, string> = {
   devpost: "Devpost",
@@ -40,17 +41,42 @@ function stripHtml(text: string | null): string {
   return text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
-export default async function EventDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+type Props = { params: Promise<{ id: string }> };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
+  const numericId = Number(id);
+  if (!Number.isFinite(numericId) || numericId <= 0) return {};
+
+  const hackathon = await getHackathonById(numericId);
+  if (!hackathon) return {};
+
+  const description = stripHtml(hackathon.description).slice(0, 160);
+
+  return {
+    title: `${hackathon.title} — HackFinder`,
+    description: description || "Descubre este hackathon en HackFinder.",
+    openGraph: {
+      title: hackathon.title,
+      description: description || undefined,
+      images: hackathon.image_url ? [{ url: hackathon.image_url }] : [],
+    },
+  };
+}
+
+export default async function EventDetailPage({ params }: Props) {
   const { id } = await params;
   const numericId = Number(id);
   if (!Number.isFinite(numericId) || numericId <= 0) notFound();
 
   const hackathon = await getHackathonById(numericId);
   if (!hackathon) notFound();
+
+  const [related] = await Promise.allSettled([
+    getRelatedHackathons(numericId, hackathon.platform, 3),
+  ]);
+
+  const relatedEvents = related.status === "fulfilled" ? related.value : [];
 
   const platform = hackathon.platform;
   const description = stripHtml(hackathon.description);
@@ -67,6 +93,7 @@ export default async function EventDetailPage({
       start={start}
       end={end}
       deadline={deadline}
+      relatedEvents={relatedEvents}
     />
   );
 }

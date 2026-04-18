@@ -297,6 +297,29 @@ export async function getHackathonById(id: number): Promise<Hackathon | null> {
   return toHackathon(data);
 }
 
+export async function getRelatedHackathons(
+  id: number,
+  platform: string | null,
+  limit = 3
+): Promise<Hackathon[]> {
+  let query = getReadClient()
+    .from("hackathons")
+    .select("*")
+    .neq("id", id)
+    .limit(limit * 3);
+
+  if (platform) {
+    query = query.eq("platform", platform);
+  }
+
+  query = applyActiveFilter(query);
+
+  const { data, error } = await query.returns<HackathonRow[]>();
+  if (error) return [];
+
+  return rankCatalogHackathons((data ?? []).map(toHackathon)).slice(0, limit);
+}
+
 export async function getHackathonByUrl(url: string): Promise<Hackathon | null> {
   const { data, error } = await getReadClient()
     .from("hackathons")
@@ -468,8 +491,6 @@ export async function listHackathons(
   options: ListHackathonsOptions = {}
 ): Promise<PaginatedHackathons> {
   const page = Math.max(1, options.page ?? 1);
-  const from = (page - 1) * LIST_PAGE_SIZE;
-  const to = from + LIST_PAGE_SIZE; // inclusive → fetches PAGE_SIZE + 1 to detect next page
 
   // Fetch a larger pool so the in-memory ranker has material to work with.
   // We retrieve 3× the page size (minimum 72) then rank, slice to PAGE_SIZE,
