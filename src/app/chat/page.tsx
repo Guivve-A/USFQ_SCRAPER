@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUp, Bot, Loader2, Sparkles, Trophy, User } from "lucide-react";
+import { AlertTriangle, ArrowUp, Bot, Loader2, Sparkles, Trophy, User, X } from "lucide-react";
 import DOMPurify from "isomorphic-dompurify";
 import { marked } from "marked";
 import Link from "next/link";
@@ -155,8 +155,16 @@ function isRawToolJsonLeak(text: string): boolean {
 }
 
 export default function ChatPage() {
-  const { messages, input, handleInputChange, handleSubmit, sendPrompt, isLoading } =
-    useChat();
+  const {
+    messages,
+    input,
+    handleInputChange,
+    handleSubmit,
+    sendPrompt,
+    isLoading,
+    chatErrorMessage,
+    clearChatError,
+  } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -256,6 +264,24 @@ export default function ChatPage() {
                   <Loader2 className="size-3.5 animate-spin" />
                   <span>Buscando en la base de datos global...</span>
                 </div>
+              </div>
+            )}
+
+            {chatErrorMessage && (
+              <div
+                role="alert"
+                className="mx-4 mb-2 flex items-start gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100 sm:mx-6"
+              >
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-300" />
+                <span className="flex-1">{chatErrorMessage}</span>
+                <button
+                  type="button"
+                  onClick={clearChatError}
+                  aria-label="Cerrar aviso de error"
+                  className="rounded p-0.5 text-amber-200/80 transition hover:bg-amber-400/20 hover:text-amber-100"
+                >
+                  <X className="size-3.5" />
+                </button>
               </div>
             )}
 
