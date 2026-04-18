@@ -35,7 +35,7 @@ ORDER BY title;
 
 
 -- 2. DELETE — run after confirming the preview ----------------
-/*
+/
 DELETE FROM hackathons
 WHERE platform = 'gdg'
   AND location = 'Ecuador'
@@ -47,7 +47,7 @@ WHERE platform = 'gdg'
 --  Also catch any platform='gdg' presential event whose location
 --  is 'Ecuador' but title/description clearly isn't Ecuador.
 --  Uncomment if the basic delete above leaves stragglers.
-/*
+/
 DELETE FROM hackathons
 WHERE platform = 'gdg'
   AND is_online = false
@@ -58,7 +58,7 @@ WHERE platform = 'gdg'
 
 
 -- 4. VERIFICATION — run after the DELETE ----------------------
-/*
+/
 SELECT
   platform,
   location,

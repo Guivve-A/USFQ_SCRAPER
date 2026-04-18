@@ -50,6 +50,12 @@ type SearchRpcParams = {
   include_unknown_region_online: boolean;
 };
 
+// All columns except the embedding vector — used for listing/browsing queries where
+// the 384-float payload would waste bandwidth unnecessarily.
+// All columns except the embedding vector — keeps list/browse queries lean.
+const HACKATHON_LIST_COLS =
+  "id,title,description,desc_translated,url,platform,start_date,end_date,deadline,location,is_online,prize_pool,prize_amount,tags,image_url,organizer,region,scraped_at,created_at";
+
 type ScrapeSourceMetricRow = {
   source: string;
   platform: string;
@@ -302,11 +308,13 @@ export async function getRelatedHackathons(
   platform: string | null,
   limit = 3
 ): Promise<Hackathon[]> {
-  let query = getReadClient()
-    .from("hackathons")
-    .select("*")
-    .neq("id", id)
-    .limit(limit * 3);
+  let query = (
+    getReadClient()
+      .from("hackathons")
+      .select(HACKATHON_LIST_COLS)
+      .neq("id", id)
+      .limit(limit * 3)
+  ) as unknown as SupabaseFilterBuilder;
 
   if (platform) {
     query = query.eq("platform", platform);
@@ -349,11 +357,13 @@ export async function getRecentHackathons(
 ): Promise<Hackathon[]> {
   const fetchLimit = Math.max(limit, 60);
 
-  let query = getReadClient()
-    .from("hackathons")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(fetchLimit);
+  let query = (
+    getReadClient()
+      .from("hackathons")
+      .select(HACKATHON_LIST_COLS)
+      .order("created_at", { ascending: false })
+      .limit(fetchLimit)
+  ) as unknown as SupabaseFilterBuilder;
 
   query = applyActiveFilter(query);
   query = applyRegionFilter(query, options.regions, options.includeUnknownOnline);
@@ -500,12 +510,14 @@ export async function listHackathons(
   const fetchFrom = (page - 1) * LIST_PAGE_SIZE;
   const fetchTo = fetchFrom + fetchSize;
 
-  let query = getReadClient()
-    .from("hackathons")
-    .select("*")
-    .order("deadline", { ascending: true, nullsFirst: false })
-    .order("created_at", { ascending: false })
-    .range(fetchFrom, fetchTo);
+  let query = (
+    getReadClient()
+      .from("hackathons")
+      .select(HACKATHON_LIST_COLS)
+      .order("deadline", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: false })
+      .range(fetchFrom, fetchTo)
+  ) as unknown as SupabaseFilterBuilder;
 
   if (options.online !== undefined) {
     query = query.eq("is_online", options.online);

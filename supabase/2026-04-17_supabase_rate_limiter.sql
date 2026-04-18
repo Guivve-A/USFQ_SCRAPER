@@ -127,6 +127,6 @@ GRANT EXECUTE ON FUNCTION public.consume_api_rate_limit(TEXT, INTEGER, INTEGER) 
 COMMIT;
 
 -- Optional verification ----------------------------------------
--- SELECT * FROM public.consume_api_rate_limit('chat:127.0.0.1', 2, 60);
--- SELECT * FROM public.consume_api_rate_limit('chat:127.0.0.1', 2, 60);
--- SELECT * FROM public.consume_api_rate_limit('chat:127.0.0.1', 2, 60);
+SELECT * FROM public.consume_api_rate_limit('chat:127.0.0.1', 2, 60);
+SELECT * FROM public.consume_api_rate_limit('chat:127.0.0.1', 2, 60);
+ SELECT * FROM public.consume_api_rate_limit('chat:127.0.0.1', 2, 60);

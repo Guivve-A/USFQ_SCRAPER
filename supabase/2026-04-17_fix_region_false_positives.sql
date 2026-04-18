@@ -5,14 +5,14 @@
 --  rows that do NOT mention Ecuador in their location/title/description.
 -- ============================================================
 
--- 1. Preview — see what will be corrected (read-only) ---------
--- SELECT id, title, location, is_online, region, platform
--- FROM hackathons
--- WHERE region = 'ecuador'
---   AND is_online = false
---   AND LOWER(COALESCE(location, '') || ' ' || COALESCE(title, '') || ' ' || COALESCE(description, ''))
---       !~ '(ecuador|quito|guayaquil|cuenca|loja|manta|ambato|machala|riobamba|portoviejo|ibarra|esmeraldas|latacunga)'
--- ORDER BY platform, title;
+-- Preview — see what will be corrected (read-only) ---------
+ SELECT id, title, location, is_online, region, platform
+ FROM hackathons
+ WHERE region = 'ecuador'
+   AND is_online = false
+   AND LOWER(COALESCE(location, '') || ' ' || COALESCE(title, '') || ' ' || COALESCE(description, ''))
+       !~ '(ecuador|quito|guayaquil|cuenca|loja|manta|ambato|machala|riobamba|portoviejo|ibarra|esmeraldas|latacunga)'
+ ORDER BY platform, title;
 
 -- 2. Correct the false positives -------------------------------
 UPDATE hackathons

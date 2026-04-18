@@ -59,13 +59,16 @@ const chatInputTextSchema = createSanitizedTextSchema(MAX_CHAT_INPUT_CHARS, {
 const chatRequestSchema = z.object({
   messages: z
     .array(
-      z
-        .object({
-          role: z.string().trim().min(1).max(32),
-          content: z.string().max(8_000).optional(),
-          parts: z.array(z.object({}).passthrough()).max(64).optional(),
-        })
-        .passthrough()
+      z.object({
+        id: z.string().max(64).optional(),
+        role: z.enum(["user", "assistant", "system"]),
+        content: z.string().max(8_000).optional(),
+        parts: z
+          .array(z.object({ type: z.string().max(64) }).catchall(z.unknown()))
+          .max(64)
+          .optional(),
+        createdAt: z.string().optional(),
+      })
     )
     .min(1)
     .max(MAX_CHAT_MESSAGES),
@@ -295,8 +298,6 @@ export async function POST(request: Request): Promise<Response> {
         "Solo usa esta herramienta para buscar hackathones, eventos o competencias. NUNCA la uses para responder saludos o preguntas generales sobre tu identidad (ej. '¿Quién eres?').",
       inputSchema: searchHackathonsSchema,
       execute: async (parameters) => {
-        console.log("Tool searchHackathons invocada con:", parameters);
-
         try {
           const { query, online, platform, scope, limit } = parameters;
 
@@ -321,8 +322,9 @@ export async function POST(request: Request): Promise<Response> {
             description: hackathon.desc_translated ?? hackathon.description,
           }));
         } catch (error) {
-          console.error("[api/chat] searchHackathons tool failed:", error);
-          return "Error en base de datos.";
+          const msg = error instanceof Error ? error.message : "Unknown error";
+          console.error("[api/chat] searchHackathons tool failed:", msg);
+          return { error: true, message: "Error en base de datos." };
         }
       },
     }),
