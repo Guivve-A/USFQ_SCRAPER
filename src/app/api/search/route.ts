@@ -4,32 +4,20 @@ import { z } from "zod";
 import { searchHackathons } from "@/lib/ai/search";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { SCOPE_VALUES, type Scope } from "@/lib/region";
+import { createSanitizedTextSchema } from "@/lib/security/input";
 
 export const runtime = "nodejs";
 
 const SEARCH_RATE_LIMIT = 20;
 const SEARCH_WINDOW_MS = 60_000;
 const MAX_QUERY_LENGTH = 500;
-const CONTROL_CHAR_REGEX = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
-const NULL_ESCAPE_REGEX = /\\x00|\\0/gi;
-
-function cleanInputText(value: string, maxChars: number): string {
-  return value
-    .replace(NULL_ESCAPE_REGEX, "")
-    .replace(CONTROL_CHAR_REGEX, "")
-    .trim()
-    .slice(0, maxChars);
-}
-
-function createSanitizedTextSchema(maxChars: number) {
-  return z
-    .string()
-    .transform((value) => cleanInputText(value, maxChars))
-    .pipe(z.string().min(1, "Query is required").max(maxChars));
-}
+const MAX_REQUEST_URL_CHARS = 2_048;
 
 const searchSchema = z.object({
-  q: createSanitizedTextSchema(MAX_QUERY_LENGTH),
+  q: createSanitizedTextSchema(MAX_QUERY_LENGTH, {
+    requiredMessage: "Query is required",
+    maxMessage: `Query must be at most ${MAX_QUERY_LENGTH} characters`,
+  }),
   online: z
     .enum(["true", "false"])
     .optional()
@@ -49,6 +37,13 @@ export async function GET(request: Request): Promise<Response> {
     windowMs: SEARCH_WINDOW_MS,
   });
   if (!rate.ok) return rate.response;
+
+  if (request.url.length > MAX_REQUEST_URL_CHARS) {
+    return NextResponse.json(
+      { error: "Request URL too long" },
+      { status: 414 }
+    );
+  }
 
   const url = new URL(request.url);
   const parsed = searchSchema.safeParse({

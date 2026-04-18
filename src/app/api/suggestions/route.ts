@@ -3,28 +3,56 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import {
+  createSanitizedTextSchema,
+  parseJsonBodyWithLimit,
+  RequestBodyParseError,
+  RequestBodyTooLargeError,
+  sanitizeInputText,
+} from "@/lib/security/input";
 
 export const runtime = "nodejs";
 
 const SUGGESTIONS_RATE_LIMIT = 8;
 const SUGGESTIONS_WINDOW_MS = 10 * 60_000;
+const MAX_SUGGESTION_BODY_BYTES = 24 * 1024;
+
+const optionalSanitizedTextSchema = (maxChars: number) =>
+  z
+    .string()
+    .transform((value) => sanitizeInputText(value))
+    .max(maxChars)
+    .optional()
+    .transform((value) => (value && value.length > 0 ? value : undefined));
 
 const suggestionSchema = z.object({
-  title: z.string().trim().min(4).max(180),
-  url: z.string().trim().url().max(400),
-  description: z.string().trim().min(12).max(3_000),
-  isOnline: z.boolean().optional().default(true),
-  source: z.string().trim().max(120).optional(),
-  contactEmail: z
+  title: createSanitizedTextSchema(180, {
+    minChars: 4,
+    requiredMessage: "Title is required",
+    maxMessage: "Title must be at most 180 characters",
+  }),
+  url: z
     .string()
-    .trim()
-    .max(160)
-    .optional()
-    .transform((value) => (value ? value : undefined))
-    .refine((value) => !value || z.string().email().safeParse(value).success, {
+    .transform((value) => sanitizeInputText(value))
+    .url("Invalid URL")
+    .max(400, "URL must be at most 400 characters"),
+  description: createSanitizedTextSchema(3_000, {
+    minChars: 12,
+    requiredMessage: "Description is required",
+    maxMessage: "Description must be at most 3000 characters",
+  }),
+  isOnline: z.boolean().optional().default(true),
+  source: optionalSanitizedTextSchema(120),
+  contactEmail: optionalSanitizedTextSchema(160).refine(
+    (value) => !value || z.string().email().safeParse(value).success,
+    {
       message: "Invalid email",
-    }),
-  website: z.string().optional(),
+    }
+  ),
+  website: z
+    .string()
+    .transform((value) => sanitizeInputText(value))
+    .optional(),
 });
 
 const SPAM_PATTERNS = [
@@ -62,7 +90,32 @@ export async function POST(request: Request): Promise<Response> {
     return rate.response;
   }
 
-  const rawBody = await request.json().catch(() => null);
+  let rawBody: unknown;
+  try {
+    rawBody = await parseJsonBodyWithLimit(request, MAX_SUGGESTION_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return NextResponse.json(
+        {
+          error: "Request body too large",
+          maxBytes: error.maxBytes,
+        },
+        { status: 413 }
+      );
+    }
+
+    if (error instanceof RequestBodyParseError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+        },
+        { status: 400 }
+      );
+    }
+
+    throw error;
+  }
+
   const parsed = suggestionSchema.safeParse(rawBody);
 
   if (!parsed.success) {

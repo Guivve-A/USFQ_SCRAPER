@@ -12,6 +12,13 @@ import { z } from "zod";
 import { searchHackathons } from "@/lib/ai/search";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { SCOPE_VALUES, type Scope } from "@/lib/region";
+import {
+  createSanitizedTextSchema,
+  parseJsonBodyWithLimit,
+  RequestBodyParseError,
+  RequestBodyTooLargeError,
+  sanitizeInputText,
+} from "@/lib/security/input";
 
 export const runtime = "edge";
 export const maxDuration = 30;
@@ -21,8 +28,7 @@ const CHAT_WINDOW_MS = 60_000;
 const MAX_CHAT_MESSAGES = 40;
 const MAX_CHAT_INPUT_CHARS = 500;
 const MAX_TOOL_QUERY_CHARS = 500;
-const CONTROL_CHAR_REGEX = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
-const NULL_ESCAPE_REGEX = /\\x00|\\0/gi;
+const MAX_CHAT_BODY_BYTES = 64 * 1024;
 
 if (!process.env.FIREWORKS_API_KEY) {
   throw new Error(
@@ -39,22 +45,10 @@ const FIREWORKS_MODEL =
   process.env.FIREWORKS_MODEL?.trim() ||
   "accounts/fireworks/models/llama-v3p3-70b-instruct";
 
-function cleanInputText(value: string, maxChars: number): string {
-  return value
-    .replace(NULL_ESCAPE_REGEX, "")
-    .replace(CONTROL_CHAR_REGEX, "")
-    .trim()
-    .slice(0, maxChars);
-}
-
-function createSanitizedTextSchema(maxChars: number) {
-  return z
-    .string()
-    .transform((value) => cleanInputText(value, maxChars))
-    .pipe(z.string().min(1).max(maxChars));
-}
-
-const chatInputTextSchema = createSanitizedTextSchema(MAX_CHAT_INPUT_CHARS);
+const chatInputTextSchema = createSanitizedTextSchema(MAX_CHAT_INPUT_CHARS, {
+  requiredMessage: "User message is required",
+  maxMessage: `User message must be at most ${MAX_CHAT_INPUT_CHARS} characters`,
+});
 
 const chatRequestSchema = z.object({
   messages: z
@@ -72,9 +66,10 @@ const chatRequestSchema = z.object({
 });
 
 const searchHackathonsSchema = z.object({
-  query: createSanitizedTextSchema(MAX_TOOL_QUERY_CHARS).describe(
-    "Descripcion semantica de lo que busca"
-  ),
+  query: createSanitizedTextSchema(MAX_TOOL_QUERY_CHARS, {
+    requiredMessage: "Query is required",
+    maxMessage: `Query must be at most ${MAX_TOOL_QUERY_CHARS} characters`,
+  }).describe("Descripcion semantica de lo que busca"),
   online: z.boolean().optional().describe("Filtrar solo online"),
   platform: z.enum(["devpost", "mlh", "eventbrite", "gdg", "lablab"]).optional(),
   scope: z
@@ -153,7 +148,7 @@ function sanitizeMessagePart(part: unknown): GenericMessagePart | null {
   const normalizedPart = { ...(part as GenericMessagePart) };
 
   if (normalizedPart.type === "text" && typeof normalizedPart.text === "string") {
-    const cleanedText = cleanInputText(normalizedPart.text, MAX_CHAT_INPUT_CHARS);
+    const cleanedText = sanitizeInputText(normalizedPart.text);
     if (!cleanedText) return null;
 
     normalizedPart.text = cleanedText;
@@ -184,7 +179,7 @@ function normalizeIncomingMessages(
 
     const maybeContent = (withoutId as { content?: unknown }).content;
     if (typeof maybeContent === "string") {
-      const cleanedContent = cleanInputText(maybeContent, MAX_CHAT_INPUT_CHARS);
+      const cleanedContent = sanitizeInputText(maybeContent);
 
       const withoutContent = Object.fromEntries(
         Object.entries(withoutId).filter(([key]) => key !== "content")
@@ -227,7 +222,32 @@ export async function POST(request: Request): Promise<Response> {
     return rate.response;
   }
 
-  const rawBody = await request.json().catch(() => null);
+  let rawBody: unknown;
+  try {
+    rawBody = await parseJsonBodyWithLimit(request, MAX_CHAT_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) {
+      return NextResponse.json(
+        {
+          error: "Request body too large",
+          maxBytes: error.maxBytes,
+        },
+        { status: 413 }
+      );
+    }
+
+    if (error instanceof RequestBodyParseError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+        },
+        { status: 400 }
+      );
+    }
+
+    throw error;
+  }
+
   const parsedBody = chatRequestSchema.safeParse(rawBody);
 
   if (!parsedBody.success) {
