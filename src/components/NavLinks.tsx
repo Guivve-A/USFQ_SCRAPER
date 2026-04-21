@@ -8,6 +8,7 @@ const links = [
   { href: "/", label: "Home" },
   { href: "/events", label: "Eventos" },
   { href: "/chat", label: "HackBot" },
+  { href: "/about", label: "Sobre mí" },
 ];
 
 function NavLink({ href, label }: { href: string; label: string }) {
