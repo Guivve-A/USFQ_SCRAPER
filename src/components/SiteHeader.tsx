@@ -39,12 +39,6 @@ export function SiteHeader({ overlay = false }: SiteHeaderProps) {
               Eventos
             </Link>
             <Link
-              href="/suggest"
-              className="rounded-lg px-2.5 py-1.5 transition-colors hover:bg-white/[0.08] hover:text-slate-100 sm:px-3"
-            >
-              Sugerir
-            </Link>
-            <Link
               href="/chat"
               className="rounded-lg px-2.5 py-1.5 transition-colors hover:bg-white/[0.08] hover:text-slate-100 sm:px-3"
             >
